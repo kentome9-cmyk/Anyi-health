@@ -42,7 +42,7 @@ export default function AdminDashboard() {
   const quickActions = [
     { title: '门店管理', description: '添加、编辑、删除门店', href: '/admin/stores', icon: Store },
     { title: '客户管理', description: '查看和管理所有客户', href: '/admin/customers', icon: Users },
-    { title: '方案记录', description: '查看AI对话记录', href: '/admin/plan-records', icon: ScrollText },
+    { title: '对话记录', description: '查看AI对话记录', href: '/admin/plan-records', icon: ScrollText },
     { title: '知识库', description: '管理产后健康知识', href: '/admin/knowledge-base', icon: BookOpen },
     { title: 'AI 设置', description: '配置 AI 分析参数', href: '/admin/ai-settings', icon: Settings },
   ];

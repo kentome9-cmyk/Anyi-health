@@ -19,7 +19,7 @@ const navigation = [
   { name: '首页', href: '/admin', icon: LayoutDashboard },
   { name: '门店管理', href: '/admin/stores', icon: Store },
   { name: '客户管理', href: '/admin/customers', icon: Users },
-  { name: '方案记录', href: '/admin/plan-records', icon: ScrollText },
+  { name: '对话记录', href: '/admin/plan-records', icon: ScrollText },
   { name: '知识库', href: '/admin/knowledge-base', icon: BookOpen },
   { name: 'AI 设置', href: '/admin/ai-settings', icon: Settings },
 ];

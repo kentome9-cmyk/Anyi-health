@@ -24,6 +24,9 @@ export async function GET(
           orderBy: { createdAt: 'desc' },
           take: 10,
         },
+        bodyRecords: {
+          orderBy: { visitDate: 'desc' },
+        },
       },
     });
 
@@ -68,8 +71,18 @@ export async function GET(
         coreProjects: plan.coreProjects,
         assistantProjects: plan.assistantProjects,
         actualCounts: plan.actualCounts,
+        isLatest: plan.isLatest,
         createdAt: plan.createdAt,
         completedAt: plan.completedAt,
+      })),
+      bodyRecords: customer.bodyRecords.map((record: typeof customer.bodyRecords[number]) => ({
+        id: record.id,
+        planId: record.planId,
+        visitCount: record.visitCount,
+        visitDate: record.visitDate,
+        records: record.records,
+        notes: record.notes,
+        createdAt: record.createdAt,
       })),
     });
   } catch (error) {

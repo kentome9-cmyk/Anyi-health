@@ -49,7 +49,7 @@ export default function AdminAiAnalysisPage() {
   const filteredRecords = analyses.filter(record =>
     record.customerName.includes(searchTerm) ||
     record.storeName.includes(searchTerm) ||
-    (record.content?.includes(searchTerm) ?? false)
+    (record.reportContent?.includes(searchTerm) ?? false)
   );
 
   const pagination = useDataTablePagination(filteredRecords, 10);
@@ -94,11 +94,11 @@ export default function AdminAiAnalysisPage() {
           <Table>
             <TableHeader className="bg-gray-50">
               <TableRow>
-                <TableHead className="font-medium text-gray-700">客户姓名</TableHead>
-                <TableHead className="font-medium text-gray-700">所属门店</TableHead>
-                <TableHead className="font-medium text-gray-700">对话内容</TableHead>
-                <TableHead className="font-medium text-gray-700">对话时间</TableHead>
-                <TableHead className="font-medium text-gray-700 text-right">操作</TableHead>
+                <TableHead className="font-medium text-gray-700 text-center">客户姓名</TableHead>
+                <TableHead className="font-medium text-gray-700 text-center">所属门店</TableHead>
+                <TableHead className="font-medium text-gray-700 text-center">对话内容</TableHead>
+                <TableHead className="font-medium text-gray-700 text-center">对话时间</TableHead>
+                <TableHead className="font-medium text-gray-700 text-center">操作</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -117,11 +117,11 @@ export default function AdminAiAnalysisPage() {
               ) : (
                 pagedRecords.map((record) => (
                   <TableRow key={record.id} className="hover:bg-gray-50">
-                    <TableCell className="font-medium text-gray-900">{record.customerName}</TableCell>
-                    <TableCell className="text-gray-600">{record.storeName}</TableCell>
-                    <TableCell className="max-w-xs text-gray-600 truncate">{record.content || '-'}</TableCell>
-                    <TableCell className="text-gray-600">{new Date(record.createdAt).toLocaleDateString()}</TableCell>
-                    <TableCell className="text-right">
+                    <TableCell className="font-medium text-gray-900 text-center">{record.customerName}</TableCell>
+                    <TableCell className="text-gray-600 text-center">{record.storeName}</TableCell>
+                    <TableCell className="max-w-xs text-gray-600 truncate text-center">{record.reportContent || '-'}</TableCell>
+                    <TableCell className="text-gray-600 text-center">{new Date(record.createdAt).toLocaleDateString()}</TableCell>
+                    <TableCell className="text-center">
                       <button
                         onClick={() => setSelectedRecord(record)}
                         className="text-sm text-gray-600 hover:text-gray-900"
@@ -174,14 +174,14 @@ export default function AdminAiAnalysisPage() {
               <div className="border-t pt-4">
                 <h4 className="font-medium text-gray-700 mb-2">客户描述：</h4>
                 <p className="text-sm text-gray-600 bg-gray-50 p-3 rounded whitespace-pre-wrap">
-                  {selectedRecord.content || '无内容'}
+                  {selectedRecord.reportContent || '无内容'}
                 </p>
               </div>
 
               <div className="border-t pt-4">
                 <h4 className="font-medium text-gray-700 mb-2">AI 分析结果：</h4>
                 <p className="text-sm text-gray-600 bg-blue-50 p-3 rounded whitespace-pre-wrap">
-                  {selectedRecord.reportContent || '无分析结果'}
+                  {selectedRecord.content || '无分析结果'}
                 </p>
               </div>
 

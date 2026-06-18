@@ -63,9 +63,14 @@ interface PlanProject {
 
 interface CustomerPlan {
   id: string;
+  version: number;
+  status: string;
+  isLatest: boolean;
   coreProjects: PlanProject[];
   assistantProjects: PlanProject[];
   actualCounts: Record<string, string>;
+  createdAt: string;
+  completedAt: string | null;
 }
 
 interface ReportRecord {
@@ -95,6 +100,9 @@ export default function StoreCustomersPage() {
   // 客户方案
   const [customerPlans, setCustomerPlans] = useState<CustomerPlan[]>([]);
 
+  // 选中的方案
+  const [selectedPlanId, setSelectedPlanId] = useState<string | null>(null);
+
   // 新增服务记录
   const [showAddRecord, setShowAddRecord] = useState(false);
   const [showProjectDropdown, setShowProjectDropdown] = useState(false);
@@ -104,6 +112,7 @@ export default function StoreCustomersPage() {
     project: '',
     count: 1,
     remark: '',
+    planId: '',
   });
 
   // 报告弹窗
@@ -278,7 +287,16 @@ export default function StoreCustomersPage() {
     try {
       const res = await fetch(`/api/admin/plan-records/customer/${customerId}`);
       const data = await res.json();
-      setCustomerPlans(data.plans || []);
+      const plans = data.plans || [];
+      setCustomerPlans(plans);
+      if (plans.length > 0) {
+        const latest = plans.find((p: CustomerPlan) => p.isLatest) || plans[0];
+        setSelectedPlanId(latest.id);
+        setNewRecord((prev) => ({ ...prev, planId: latest.id }));
+      } else {
+        setSelectedPlanId(null);
+        setNewRecord((prev) => ({ ...prev, planId: '' }));
+      }
       return;
       if (data.plans && data.plans.length > 0) {
         setCustomerPlans(data.plans);
@@ -335,8 +353,15 @@ export default function StoreCustomersPage() {
     }
   };
 
+  const getSelectedPlan = () => {
+    if (selectedPlanId) {
+      return customerPlans.find((p) => p.id === selectedPlanId) || customerPlans[0] || null;
+    }
+    return customerPlans[0] || null;
+  };
+
   const getAvailableProjects = () => {
-    const plan = customerPlans[0];
+    const plan = getSelectedPlan();
     if (!plan) return [];
 
     const allProjects: {
@@ -431,6 +456,7 @@ export default function StoreCustomersPage() {
         body: JSON.stringify({
           customerId: selectedCustomer.id,
           storeId,
+          planId: newRecord.planId || selectedPlanId,
           visitDate: newRecord.date,
           visitCount: newRecord.count,
           records: [{ label: '服务项目', value: newRecord.project }],
@@ -439,7 +465,13 @@ export default function StoreCustomersPage() {
       });
       if (res.ok) {
         await loadServiceRecords(selectedCustomer.id);
-        setNewRecord({ date: new Date().toISOString().split('T')[0], project: '', count: 1, remark: '' });
+        setNewRecord({
+          date: new Date().toISOString().split('T')[0],
+          project: '',
+          count: 1,
+          remark: '',
+          planId: selectedPlanId,
+        });
         setShowAddRecord(false);
         setShowProjectDropdown(false);
       }
@@ -694,50 +726,77 @@ export default function StoreCustomersPage() {
                 </div>
               </div>
 
-              {/* 第一期调理方案 */}
-              {customerPlans.length > 0 && customerPlans[0] && (
-                <div className="pt-4 border-t">
-                  <h4 className="font-semibold mb-3">第一期调理方案</h4>
-                  <div className="overflow-x-auto">
-                    <Table>
-                      <TableHeader>
-                        <TableRow>
-                          <TableHead>项目名称</TableHead>
-                          <TableHead className="text-center">类型</TableHead>
-                          <TableHead className="text-center">建议次数</TableHead>
-                          <TableHead className="text-center">实际次数</TableHead>
-                        </TableRow>
-                      </TableHeader>
-                      <TableBody>
-                        {customerPlans[0].coreProjects?.map((project, idx) => (
-                          <TableRow key={`core-${idx}`}>
-                            <TableCell>{project.name}</TableCell>
-                            <TableCell className="text-center">
-                              <Badge className="bg-green-100 text-green-700 border-green-300">核心</Badge>
-                            </TableCell>
-                            <TableCell className="text-center text-gray-500">{project.suggestedCount || '-'}</TableCell>
-                            <TableCell className="text-center font-medium text-green-700">
-                              {customerPlans[0].actualCounts?.[`core_${project.name}`] || '-'}
-                            </TableCell>
+              {/* 调理方案 */}
+              {(() => {
+                const activePlan = getSelectedPlan();
+                if (!activePlan) return null;
+                return (
+                  <div className="pt-4 border-t">
+                    <div className="flex items-center justify-between mb-3">
+                      <h4 className="font-semibold">第{activePlan.version}期调理方案</h4>
+                      {customerPlans.length > 1 && (
+                        <Select
+                          value={selectedPlanId || activePlan.id}
+                          onValueChange={(value) => {
+                            setSelectedPlanId(value);
+                            setNewRecord((prev) => ({ ...prev, planId: value }));
+                          }}
+                        >
+                          <SelectTrigger className="w-48">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {customerPlans.map((plan) => (
+                              <SelectItem key={plan.id} value={plan.id}>
+                                第{plan.version}期 ({new Date(plan.createdAt).toLocaleDateString()})
+                                {plan.isLatest ? ' - 最新' : ''}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      )}
+                    </div>
+                    <div className="overflow-x-auto">
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>项目名称</TableHead>
+                            <TableHead className="text-center">类型</TableHead>
+                            <TableHead className="text-center">建议次数</TableHead>
+                            <TableHead className="text-center">实际次数</TableHead>
                           </TableRow>
-                        ))}
-                        {customerPlans[0].assistantProjects?.map((project, idx) => (
-                          <TableRow key={`assistant-${idx}`}>
-                            <TableCell>{project.name}</TableCell>
-                            <TableCell className="text-center">
-                              <Badge className="bg-blue-100 text-blue-700 border-blue-300">辅助</Badge>
-                            </TableCell>
-                            <TableCell className="text-center text-gray-500">{project.suggestedCount || '-'}</TableCell>
-                            <TableCell className="text-center font-medium text-green-700">
-                              {customerPlans[0].actualCounts?.[`assistant_${project.name}`] || '-'}
-                            </TableCell>
-                          </TableRow>
-                        ))}
-                      </TableBody>
-                    </Table>
+                        </TableHeader>
+                        <TableBody>
+                          {activePlan.coreProjects?.map((project, idx) => (
+                            <TableRow key={`core-${idx}`}>
+                              <TableCell>{project.name}</TableCell>
+                              <TableCell className="text-center">
+                                <Badge className="bg-green-100 text-green-700 border-green-300">核心</Badge>
+                              </TableCell>
+                              <TableCell className="text-center text-gray-500">{project.suggestedCount || '-'}</TableCell>
+                              <TableCell className="text-center font-medium text-green-700">
+                                {activePlan.actualCounts?.[`core_${project.name}`] || '-'}
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                          {activePlan.assistantProjects?.map((project, idx) => (
+                            <TableRow key={`assistant-${idx}`}>
+                              <TableCell>{project.name}</TableCell>
+                              <TableCell className="text-center">
+                                <Badge className="bg-blue-100 text-blue-700 border-blue-300">辅助</Badge>
+                              </TableCell>
+                              <TableCell className="text-center text-gray-500">{project.suggestedCount || '-'}</TableCell>
+                              <TableCell className="text-center font-medium text-green-700">
+                                {activePlan.actualCounts?.[`assistant_${project.name}`] || '-'}
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </div>
                   </div>
-                </div>
-              )}
+                );
+              })()}
 
               {/* Service Records */}
               <div>
@@ -775,6 +834,32 @@ export default function StoreCustomersPage() {
                             value={newRecord.count}
                             onChange={(e) => setNewRecord((prev) => ({ ...prev, count: Number(e.target.value) }))}
                           />
+                        </div>
+                        <div className="col-span-2">
+                          <label className="text-sm text-gray-500">所属方案</label>
+                          {customerPlans.length > 0 ? (
+                            <Select
+                              value={newRecord.planId}
+                              onValueChange={(value) => {
+                                setNewRecord((prev) => ({ ...prev, planId: value }));
+                                setSelectedPlanId(value);
+                              }}
+                            >
+                              <SelectTrigger>
+                                <SelectValue placeholder="请选择方案" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {customerPlans.map((plan, idx) => (
+                                  <SelectItem key={plan.id} value={plan.id}>
+                                    第{plan.version}期 ({new Date(plan.createdAt).toLocaleDateString()})
+                                    {plan.isLatest ? ' - 最新' : ''}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          ) : (
+                            <Input disabled placeholder="暂无方案，请先为客户生成方案" />
+                          )}
                         </div>
                         <div className="col-span-2" ref={projectDropdownRef}>
                           <label className="text-sm text-gray-500">服务项目</label>

@@ -5,10 +5,33 @@ import { useParams, useRouter } from 'next/navigation';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
-import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { ArrowLeft, User, MessageSquare, FileText, Edit } from '@/lib/icons';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
+import { Badge } from '@/components/ui/badge';
+import { ArrowLeft, User, MessageSquare, FileText, RefreshCw, CheckCircle, Calendar } from '@/lib/icons';
+
+interface PlanProject {
+  name: string;
+  suggestedCount: string;
+}
+
+interface BodyRecord {
+  id: string;
+  planId: string | null;
+  visitCount: number;
+  visitDate: string;
+  records: any;
+  notes: string | null;
+  createdAt: string;
+}
 
 interface CustomerDetail {
   basic: {
@@ -41,12 +64,14 @@ interface CustomerDetail {
     version: number;
     status: string;
     structuredContent: any;
-    coreProjects: any;
-    assistantProjects: any;
-    actualCounts: any;
+    coreProjects: PlanProject[] | any;
+    assistantProjects: PlanProject[] | any;
+    actualCounts: Record<string, string> | any;
+    isLatest: boolean;
     createdAt: string;
     completedAt: string | null;
   }>;
+  bodyRecords: BodyRecord[];
 }
 
 export default function CustomerDetailPage() {
@@ -54,18 +79,10 @@ export default function CustomerDetailPage() {
   const router = useRouter();
   const [customer, setCustomer] = useState<CustomerDetail | null>(null);
   const [loading, setLoading] = useState(true);
-  const [isEditOpen, setIsEditOpen] = useState(false);
-  const [formData, setFormData] = useState({
-    name: '',
-    phone: '',
-    age: '',
-    storeId: '',
-    postpartumDays: '',
-    deliveryMethod: '',
-    birthOrder: '',
-    allergy: '',
-    notes: '',
-  });
+  const [conversationDialog, setConversationDialog] = useState<{
+    title: string;
+    content: string | null;
+  } | null>(null);
 
   useEffect(() => {
     loadCustomerDetail();
@@ -73,6 +90,7 @@ export default function CustomerDetailPage() {
 
   const loadCustomerDetail = async () => {
     try {
+      setLoading(true);
       const res = await fetch(`/api/admin/customers/${params.id}`);
       const data = await res.json();
       setCustomer(data);
@@ -83,41 +101,36 @@ export default function CustomerDetailPage() {
     }
   };
 
-  const handleEdit = () => {
-    if (!customer) return;
-    setFormData({
-      name: customer.basic.name,
-      phone: customer.basic.phone,
-      age: customer.basic.age?.toString() || '',
-      storeId: customer.basic.storeId,
-      postpartumDays: customer.basic.postpartumDays?.toString() || '',
-      deliveryMethod: customer.basic.deliveryMethod || '',
-      birthOrder: customer.basic.birthOrder?.toString() || '',
-      allergy: customer.basic.allergy || '',
-      notes: customer.basic.notes || '',
+  const formatDate = (date: Date) => {
+    return date.toLocaleString('zh-CN', {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
     });
-    setIsEditOpen(true);
   };
 
-  const handleSaveEdit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const parseProjects = (projects: PlanProject[] | any): PlanProject[] => {
+    if (Array.isArray(projects)) return projects;
+    if (!projects) return [];
     try {
-      const res = await fetch(`/api/admin/customers/${params.id}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ...formData,
-          age: formData.age ? parseInt(formData.age) : null,
-          postpartumDays: formData.postpartumDays ? parseInt(formData.postpartumDays) : null,
-          birthOrder: formData.birthOrder ? parseInt(formData.birthOrder) : null,
-        }),
-      });
-      if (res.ok) {
-        setIsEditOpen(false);
-        loadCustomerDetail();
-      }
-    } catch (error) {
-      console.error('Failed to update customer:', error);
+      if (typeof projects === 'string') return JSON.parse(projects);
+      return projects as PlanProject[];
+    } catch {
+      return [];
+    }
+  };
+
+  const parseActualCounts = (counts: Record<string, string> | any): Record<string, string> => {
+    if (!counts) return {};
+    if (typeof counts === 'object') return counts;
+    try {
+      if (typeof counts === 'string') return JSON.parse(counts);
+      return {};
+    } catch {
+      return {};
     }
   };
 
@@ -129,63 +142,66 @@ export default function CustomerDetailPage() {
     return <div className="p-4 text-gray-500">未找到客户信息</div>;
   }
 
-  const formatPlanStatus = (status: string) => {
-    if (status === 'active') return { text: '进行中', style: 'bg-blue-100 text-blue-700' };
-    if (status === 'completed') return { text: '已完成', style: 'bg-green-100 text-green-700' };
-    return { text: status, style: 'bg-gray-100 text-gray-700' };
+  const getPlanTitle = (plan: CustomerDetail['plans'][number], coreProjects: PlanProject[]) => {
+    const dateStr = new Date(plan.createdAt).toISOString().slice(0, 10).replace(/-/g, '-');
+    const projectNames = coreProjects.slice(0, 2).map(p => p.name).join('、');
+    return `${dateStr} ${projectNames || '调理'} 方案`;
   };
 
-  const formatContent = (data: any) => {
-    if (!data) return '-';
-    if (typeof data === 'string') return data;
-    try {
-      return JSON.stringify(data, null, 2);
-    } catch {
-      return String(data);
+  const getBodyRecordsForPlan = (plan: CustomerDetail['plans'][number], planIndex: number) => {
+    const matchingById = customer.bodyRecords.filter(r => r.planId === plan.id);
+    if (matchingById.length > 0) return matchingById;
+
+    const allPlans = customer.plans;
+    const planDate = new Date(plan.createdAt);
+    let nextPlanDate: Date | null = null;
+    for (let i = planIndex - 1; i >= 0; i--) {
+      if (allPlans[i] && allPlans[i].id !== plan.id) {
+        nextPlanDate = new Date(allPlans[i].createdAt);
+        break;
+      }
     }
+
+    return customer.bodyRecords.filter(r => {
+      if (r.planId) return false;
+      const recordDate = new Date(r.visitDate);
+      if (recordDate < planDate) return false;
+      if (nextPlanDate && recordDate >= nextPlanDate) return false;
+      return true;
+    });
   };
+
+  const totalBodyRecords = customer.bodyRecords.length;
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between items-center">
-        <Button
-          variant="ghost"
-          onClick={() => router.back()}
-        >
-          <ArrowLeft className="h-4 w-4 mr-2" />
-          返回列表
+      <div className="flex items-center gap-4">
+        <Button variant="secondary" size="icon" onClick={() => router.back()}>
+          <ArrowLeft className="h-4 w-4" />
         </Button>
-        <Button onClick={handleEdit}>
-          <Edit className="h-4 w-4 mr-2" />
-          编辑信息
-        </Button>
+        <div>
+          <h2 className="text-2xl font-bold text-gray-900">客户详情</h2>
+          <p className="text-gray-500">{customer.basic.name} - {customer.basic.phone}</p>
+        </div>
       </div>
 
-      {/* 页面标题 */}
-      <div>
-        <h2 className="text-2xl font-bold text-gray-900">客户详情 - {customer.basic.name}</h2>
-        <p className="text-gray-500">查看客户基本信息、对话记录和方案搭配</p>
-      </div>
-
-      {/* Tab 切换 */}
       <Tabs defaultValue="basic" className="w-full">
-        <TabsList className="grid w-full grid-cols-3">
+        <TabsList className="bg-gray-100">
           <TabsTrigger value="basic" className="flex items-center gap-2">
             <User className="h-4 w-4" />
             基本信息
           </TabsTrigger>
           <TabsTrigger value="conversations" className="flex items-center gap-2">
             <MessageSquare className="h-4 w-4" />
-            对话记录 ({customer.conversations.length})
+            对话记录
           </TabsTrigger>
           <TabsTrigger value="plans" className="flex items-center gap-2">
             <FileText className="h-4 w-4" />
-            方案搭配 ({customer.plans.length})
+            方案搭配
           </TabsTrigger>
         </TabsList>
 
-        {/* 基本信息 */}
-        <TabsContent value="basic" className="space-y-4">
+        <TabsContent value="basic" className="space-y-4 mt-6">
           <Card>
             <CardHeader>
               <CardTitle>基本信息</CardTitle>
@@ -253,202 +269,266 @@ export default function CustomerDetailPage() {
           </Card>
         </TabsContent>
 
-        {/* 对话记录 */}
-        <TabsContent value="conversations" className="space-y-4">
-          {customer.conversations.map((conv) => (
-            <Card key={conv.id}>
-              <CardHeader className="pb-2">
-                <div className="flex justify-between items-center">
-                  <CardTitle className="text-sm">对话记录</CardTitle>
-                  <span className="text-xs text-gray-500">
-                    {new Date(conv.createdAt).toLocaleString()}
-                  </span>
-                </div>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                <div className="bg-gray-50 p-4 rounded-lg">
-                  <Label className="text-gray-500 text-xs block mb-1">客户描述</Label>
-                  <p className="text-sm text-gray-700 whitespace-pre-wrap">
-                    {conv.content || '无内容'}
-                  </p>
-                </div>
-                <div className="bg-blue-50 p-4 rounded-lg">
-                  <Label className="text-blue-600 text-xs block mb-1">AI 分析</Label>
-                  <p className="text-sm text-gray-700 whitespace-pre-wrap">
-                    {conv.reportContent || '无分析结果'}
-                  </p>
-                </div>
-                {conv.structuredData && (
-                  <div className="bg-green-50 p-4 rounded-lg">
-                    <Label className="text-green-600 text-xs block mb-1">结构化数据</Label>
-                    <pre className="text-sm text-gray-700 whitespace-pre-wrap overflow-x-auto">
-                      {formatContent(conv.structuredData)}
-                    </pre>
-                  </div>
+        <TabsContent value="conversations" className="space-y-4 mt-6">
+          <div className="flex items-center justify-between mb-3">
+            <div className="text-sm text-gray-500">共 {customer.conversations.length} 条对话记录</div>
+            <Button variant="outline" size="sm" onClick={loadCustomerDetail}>
+              <RefreshCw className="h-4 w-4 mr-1" />
+              刷新
+            </Button>
+          </div>
+
+          <div className="border rounded-lg overflow-hidden bg-white">
+            <Table>
+              <TableHeader className="bg-gray-50">
+                <TableRow>
+                  <TableHead className="font-medium text-gray-700">时间</TableHead>
+                  <TableHead className="font-medium text-gray-700">发起内容</TableHead>
+                  <TableHead className="font-medium text-gray-700">返回内容</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {customer.conversations.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={3} className="text-center text-gray-500 py-8">
+                      暂无对话记录
+                    </TableCell>
+                  </TableRow>
+                ) : (
+                  customer.conversations.map((record) => (
+                    <TableRow key={record.id} className="hover:bg-gray-50">
+                      <TableCell className="text-gray-600 whitespace-nowrap">
+                        {formatDate(new Date(record.createdAt))}
+                      </TableCell>
+                      <TableCell className="max-w-md">
+                        <button
+                          onClick={() => setConversationDialog({
+                            title: '发起内容',
+                            content: record.reportContent,
+                          })}
+                          className="text-left text-gray-600 hover:text-gray-900"
+                        >
+                          {(record.reportContent || '无').slice(0, 60)}
+                          {(record.reportContent || '').length > 60 ? '...' : ''}
+                        </button>
+                      </TableCell>
+                      <TableCell className="max-w-md">
+                        <button
+                          onClick={() => setConversationDialog({
+                            title: '返回内容',
+                            content: record.content,
+                          })}
+                          className="text-left text-gray-600 hover:text-gray-900"
+                        >
+                          {(record.content || '无').slice(0, 60)}
+                          {(record.content || '').length > 60 ? '...' : ''}
+                        </button>
+                      </TableCell>
+                    </TableRow>
+                  ))
                 )}
-              </CardContent>
-            </Card>
-          ))}
-          {customer.conversations.length === 0 && (
-            <Card>
-              <CardContent className="py-8 text-center text-gray-500">
-                暂无对话记录
-              </CardContent>
-            </Card>
-          )}
+              </TableBody>
+            </Table>
+          </div>
         </TabsContent>
 
-        {/* 方案搭配 */}
-        <TabsContent value="plans" className="space-y-4">
-          {customer.plans.map((plan) => {
-            const statusInfo = formatPlanStatus(plan.status);
-            return (
-              <Card key={plan.id}>
-                <CardHeader>
-                  <div className="flex justify-between items-center">
-                    <CardTitle>方案版本 v{plan.version}</CardTitle>
-                    <span className={`px-3 py-1 rounded-full text-xs ${statusInfo.style}`}>
-                      {statusInfo.text}
-                    </span>
+        <TabsContent value="plans" className="space-y-6 mt-6">
+          {customer.plans.length > 0 && (
+            <div>
+              {customer.plans.map((plan, planIndex) => {
+                const coreProjects = parseProjects(plan.coreProjects);
+                const assistantProjects = parseProjects(plan.assistantProjects);
+                const actualCounts = parseActualCounts(plan.actualCounts);
+                const planBodyRecords = getBodyRecordsForPlan(plan, planIndex);
+                const planTitle = getPlanTitle(plan, coreProjects);
+
+                return (
+                  <div key={plan.id} className="space-y-4 mb-4">
+                    <Card>
+                      <CardHeader>
+                        <CardTitle className="text-lg flex items-center gap-2">
+                          <FileText className="h-5 w-5 text-gray-700" />
+                          {planTitle}
+                          {plan.isLatest && (
+                            <Badge className="bg-green-500 ml-2">最新方案</Badge>
+                          )}
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent className="space-y-6">
+                        {(() => {
+                          const hasProjects = coreProjects.length > 0 || assistantProjects.length > 0;
+
+                          if (!hasProjects) {
+                            return <div className="text-center text-gray-500 py-4">暂无方案数据</div>;
+                          }
+
+                          return (
+                            <div className="border rounded-lg overflow-hidden bg-white">
+                              <Table>
+                                <TableHeader className="bg-gray-50">
+                                  <TableRow>
+                                    <TableHead className="font-medium text-gray-700">类别</TableHead>
+                                    <TableHead className="font-medium text-gray-700">项目名称</TableHead>
+                                    <TableHead className="font-medium text-gray-700">建议次数</TableHead>
+                                    <TableHead className="font-medium text-gray-700">剩余次数</TableHead>
+                                    <TableHead className="font-medium text-gray-700">状态</TableHead>
+                                  </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                  {coreProjects.map((project, idx) => {
+                                    const actualCount = parseInt(actualCounts[project.name] || '0');
+                                    const suggested = parseInt(project.suggestedCount) || 0;
+                                    const remaining = Math.max(0, suggested - actualCount);
+                                    const isDone = remaining === 0 && suggested > 0;
+                                    return (
+                                      <TableRow key={`core-${idx}`} className="hover:bg-gray-50">
+                                        <TableCell>
+                                          <span className="inline-flex items-center gap-1 px-2 py-1 bg-green-50 text-green-700 rounded text-xs font-medium">
+                                            <CheckCircle className="h-3 w-3" />
+                                            核心
+                                          </span>
+                                        </TableCell>
+                                        <TableCell className="font-medium text-gray-900">{project.name}</TableCell>
+                                        <TableCell className="text-gray-600">{project.suggestedCount}次</TableCell>
+                                        <TableCell>
+                                          <span className={remaining > 0 ? 'text-orange-600 font-medium' : 'text-green-600'}>
+                                            {remaining}次
+                                          </span>
+                                        </TableCell>
+                                        <TableCell>
+                                          {isDone ? (
+                                            <Badge variant="secondary">已完成</Badge>
+                                          ) : (
+                                            <Badge className="bg-blue-500">进行中</Badge>
+                                          )}
+                                        </TableCell>
+                                      </TableRow>
+                                    );
+                                  })}
+                                  {assistantProjects.map((project, idx) => {
+                                    const actualCount = parseInt(actualCounts[project.name] || '0');
+                                    const suggested = parseInt(project.suggestedCount) || 0;
+                                    const remaining = Math.max(0, suggested - actualCount);
+                                    const isDone = remaining === 0 && suggested > 0;
+                                    return (
+                                      <TableRow key={`assistant-${idx}`} className="hover:bg-gray-50">
+                                        <TableCell>
+                                          <span className="inline-flex items-center gap-1 px-2 py-1 bg-gray-100 text-gray-700 rounded text-xs font-medium">
+                                            <FileText className="h-3 w-3" />
+                                            辅助
+                                          </span>
+                                        </TableCell>
+                                        <TableCell className="font-medium text-gray-900">{project.name}</TableCell>
+                                        <TableCell className="text-gray-600">{project.suggestedCount}次</TableCell>
+                                        <TableCell>
+                                          <span className={remaining > 0 ? 'text-orange-600 font-medium' : 'text-green-600'}>
+                                            {remaining}次
+                                          </span>
+                                        </TableCell>
+                                        <TableCell>
+                                          {isDone ? (
+                                            <Badge variant="secondary">已完成</Badge>
+                                          ) : (
+                                            <Badge className="bg-blue-500">进行中</Badge>
+                                          )}
+                                        </TableCell>
+                                      </TableRow>
+                                    );
+                                  })}
+                                </TableBody>
+                              </Table>
+                            </div>
+                          );
+                        })()}
+
+                        <div>
+                          <div className="flex items-center gap-2 mb-2">
+                            <Calendar className="h-4 w-4 text-gray-500" />
+                            <span className="font-medium text-gray-900">
+                              服务记录 ({planBodyRecords.length}条)
+                            </span>
+                          </div>
+                          {planBodyRecords.length === 0 ? (
+                            <div className="border rounded-lg bg-white p-4 text-center text-gray-500 text-sm">
+                              暂无服务记录
+                            </div>
+                          ) : (
+                            <div className="bg-gray-50 p-3 rounded-lg space-y-2">
+                              {planBodyRecords.map((record) => {
+                                let recordText = '';
+                                const records = record.records;
+                                if (records) {
+                                  if (Array.isArray(records)) {
+                                    recordText = records.map((r: any) =>
+                                      typeof r === 'object' ? (r.label || r.name || '') + ': ' + (r.value || '') : String(r)
+                                    ).join(' | ');
+                                  } else if (typeof records === 'object') {
+                                    recordText = Object.entries(records)
+                                      .map(([k, v]: [string, any]) => `${k}: ${v}`)
+                                      .join(' | ');
+                                  } else {
+                                    recordText = String(records);
+                                  }
+                                }
+                                return (
+                                  <div key={record.id} className="flex items-start gap-3 text-sm">
+                                    <div className="flex-1 flex items-baseline gap-3">
+                                      <span className="font-medium text-gray-900 min-w-24">
+                                        {new Date(record.visitDate).toLocaleDateString()}
+                                      </span>
+                                      <span className="text-gray-600">
+                                        {recordText || '服务记录'}
+                                      </span>
+                                    </div>
+                                    <Badge variant="outline">{record.visitCount}次</Badge>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="flex justify-between items-center pt-4 border-t">
+                          <div className="text-sm text-gray-500 flex items-center gap-1">
+                            <Calendar className="h-4 w-4" />
+                            方案生成时间: {new Date(plan.createdAt).toLocaleDateString()}
+                          </div>
+                          <div className="flex gap-2 items-center">
+                            <Badge variant={plan.status === 'active' ? 'default' : 'secondary'} className={plan.status === 'active' ? 'bg-green-500' : ''}>
+                              {plan.status === 'active' ? '进行中' : plan.status === 'completed' ? '已完成' : plan.status}
+                            </Badge>
+                            <span className="text-sm text-gray-500">
+                              v{plan.version || 1}
+                            </span>
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
                   </div>
-                  <CardDescription>
-                    创建时间：{new Date(plan.createdAt).toLocaleString()}
-                    {plan.completedAt && ` · 完成时间：${new Date(plan.completedAt).toLocaleString()}`}
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  <div className="bg-gray-50 p-4 rounded-lg">
-                    <Label className="text-gray-500 text-sm block mb-2">方案内容</Label>
-                    <pre className="text-sm text-gray-700 whitespace-pre-wrap overflow-x-auto max-h-96">
-                      {formatContent(plan.structuredContent)}
-                    </pre>
-                  </div>
-                  {plan.coreProjects && (
-                    <div className="bg-blue-50 p-4 rounded-lg">
-                      <Label className="text-blue-600 text-sm block mb-2">核心项目</Label>
-                      <pre className="text-sm text-gray-700 whitespace-pre-wrap overflow-x-auto max-h-48">
-                        {formatContent(plan.coreProjects)}
-                      </pre>
-                    </div>
-                  )}
-                  {plan.assistantProjects && (
-                    <div className="bg-purple-50 p-4 rounded-lg">
-                      <Label className="text-purple-600 text-sm block mb-2">辅助项目</Label>
-                      <pre className="text-sm text-gray-700 whitespace-pre-wrap overflow-x-auto max-h-48">
-                        {formatContent(plan.assistantProjects)}
-                      </pre>
-                    </div>
-                  )}
-                  {plan.actualCounts && (
-                    <div className="bg-green-50 p-4 rounded-lg">
-                      <Label className="text-green-600 text-sm block mb-2">实际次数</Label>
-                      <pre className="text-sm text-gray-700 whitespace-pre-wrap overflow-x-auto max-h-48">
-                        {formatContent(plan.actualCounts)}
-                      </pre>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-            );
-          })}
+                );
+              })}
+            </div>
+          )}
+
           {customer.plans.length === 0 && (
-            <Card>
-              <CardContent className="py-8 text-center text-gray-500">
-                暂无方案记录
-              </CardContent>
-            </Card>
+            <div className="border rounded-lg bg-white p-8 text-center text-gray-500">
+              暂无调理方案
+            </div>
           )}
         </TabsContent>
       </Tabs>
 
-      {/* 编辑弹窗 */}
-      <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
-        <DialogContent>
+      <Dialog
+        open={!!conversationDialog}
+        onOpenChange={(open) => !open && setConversationDialog(null)}
+      >
+        <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>编辑客户信息</DialogTitle>
+            <DialogTitle>{conversationDialog?.title}</DialogTitle>
           </DialogHeader>
-          <form onSubmit={handleSaveEdit} className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="editName">姓名</Label>
-                <Input
-                  id="editName"
-                  value={formData.name}
-                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="editPhone">手机号</Label>
-                <Input
-                  id="editPhone"
-                  value={formData.phone}
-                  onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                />
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="editAge">年龄</Label>
-                <Input
-                  id="editAge"
-                  type="number"
-                  value={formData.age}
-                  onChange={(e) => setFormData({ ...formData, age: e.target.value })}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="editPostpartumDays">产后天数</Label>
-                <Input
-                  id="editPostpartumDays"
-                  type="number"
-                  value={formData.postpartumDays}
-                  onChange={(e) => setFormData({ ...formData, postpartumDays: e.target.value })}
-                />
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="editDeliveryMethod">生产方式</Label>
-                <Input
-                  id="editDeliveryMethod"
-                  value={formData.deliveryMethod}
-                  onChange={(e) => setFormData({ ...formData, deliveryMethod: e.target.value })}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="editBirthOrder">生产胎数</Label>
-                <Input
-                  id="editBirthOrder"
-                  type="number"
-                  value={formData.birthOrder}
-                  onChange={(e) => setFormData({ ...formData, birthOrder: e.target.value })}
-                />
-              </div>
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="editAllergy">过敏史</Label>
-              <Input
-                id="editAllergy"
-                value={formData.allergy}
-                onChange={(e) => setFormData({ ...formData, allergy: e.target.value })}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="editNotes">备注</Label>
-              <textarea
-                id="editNotes"
-                className="w-full p-2 border rounded-md text-sm h-20"
-                value={formData.notes}
-                onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-              />
-            </div>
-            <div className="flex justify-end gap-3">
-              <Button type="button" variant="outline" onClick={() => setIsEditOpen(false)}>
-                取消
-              </Button>
-              <Button type="submit">保存</Button>
-            </div>
-          </form>
+          <div className="text-sm text-gray-700 whitespace-pre-wrap">
+            {conversationDialog?.content || '无内容'}
+          </div>
         </DialogContent>
       </Dialog>
     </div>
