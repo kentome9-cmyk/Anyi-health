@@ -4,7 +4,6 @@ import { prisma } from '@/lib/prisma';
 export async function GET() {
   try {
     const settings = await prisma.aiSettings.findFirst({
-      where: { storeId: null },
       orderBy: { createdAt: 'desc' },
     });
 
@@ -17,7 +16,6 @@ export async function GET() {
       embeddingApiKey: '',
       embeddingBaseUrl: '',
       embeddingModelId: '',
-      systemPrompt: '',
     });
   } catch (error) {
     console.error('Get ai settings error:', error);
@@ -33,12 +31,10 @@ export async function PUT(request: Request) {
     const body = await request.json();
     const { 
       apiKey, agentId, datasetId, baseUrl, modelId, 
-      embeddingApiKey, embeddingBaseUrl, embeddingModelId,
-      systemPrompt 
+      embeddingApiKey, embeddingBaseUrl, embeddingModelId
     } = body;
 
     const existing = await prisma.aiSettings.findFirst({
-      where: { storeId: null },
       orderBy: { createdAt: 'desc' },
     });
 
@@ -55,7 +51,6 @@ export async function PUT(request: Request) {
           embeddingApiKey,
           embeddingBaseUrl,
           embeddingModelId,
-          systemPrompt,
         },
       });
     } else {
@@ -69,7 +64,6 @@ export async function PUT(request: Request) {
           embeddingApiKey,
           embeddingBaseUrl,
           embeddingModelId,
-          systemPrompt,
         },
       });
     }

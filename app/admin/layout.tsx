@@ -6,6 +6,7 @@ import { useRouter, usePathname } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { useAuthStore } from '@/stores/auth.store';
+import { SidebarNav } from '@/components/ui/sidebar-nav';
 import {
   LayoutDashboard,
   Store,
@@ -13,13 +14,32 @@ import {
   BookOpen,
   Settings,
   ScrollText,
+  Bot,
+  FileText,
+  MessageSquare,
+  Lightbulb,
 } from '@/lib/icons';
 
 const navigation = [
   { name: '首页', href: '/admin', icon: LayoutDashboard },
   { name: '门店管理', href: '/admin/stores', icon: Store },
-  { name: '客户管理', href: '/admin/customers', icon: Users },
-  { name: '对话记录', href: '/admin/plan-records', icon: ScrollText },
+  {
+    name: '客户服务',
+    icon: Users,
+    children: [
+      { name: '客户管理', href: '/admin/customers', icon: Users },
+      { name: '对话记录', href: '/admin/plan-records', icon: ScrollText },
+    ],
+  },
+  {
+    name: 'AI 助手',
+    icon: Bot,
+    children: [
+      { name: '内容生成', href: '/admin/ai-content', icon: FileText },
+      { name: '问答管理', href: '/admin/ai-qa', icon: MessageSquare },
+      { name: '提示词管理', href: '/admin/prompts', icon: Lightbulb },
+    ],
+  },
   { name: '知识库', href: '/admin/knowledge-base', icon: BookOpen },
   { name: 'AI 设置', href: '/admin/ai-settings', icon: Settings },
 ];
@@ -59,45 +79,8 @@ export default function AdminLayout({
         </div>
         
         {/* 导航 */}
-        <nav className="flex-1 px-3">
-          <div className="space-y-1">
-            {navigation.map((item) => {
-              let isActive = false;
-              if (item.href === '/admin') {
-                // 首页：只有路径等于 /admin 或 /admin/ 时才算激活
-                isActive = pathname === '/admin' || pathname === '/admin/';
-              } else {
-                // 其他页面：路径匹配或以该路径开头才算激活
-                isActive = pathname === item.href || pathname?.startsWith(item.href + '/');
-              }
-              return (
-                <Link key={item.name} href={item.href}>
-                  <span className="flex items-center w-full px-3 py-2 text-sm rounded-md transition-colors cursor-pointer"
-                        style={{
-                          backgroundColor: isActive ? 'rgba(255,255,255,0.15)' : 'transparent',
-                          color: isActive ? '#ffffff' : 'rgba(255,255,255,0.8)',
-                          fontWeight: isActive ? 500 : 400,
-                        }}
-                        onMouseEnter={(e) => {
-                          if (!isActive) {
-                            e.currentTarget.style.backgroundColor = 'rgba(255,255,255,0.08)';
-                            e.currentTarget.style.color = '#ffffff';
-                          }
-                        }}
-                        onMouseLeave={(e) => {
-                          if (!isActive) {
-                            e.currentTarget.style.backgroundColor = 'transparent';
-                            e.currentTarget.style.color = 'rgba(255,255,255,0.8)';
-                          }
-                        }}
-                  >
-                    <item.icon className="mr-3 h-4 w-4 flex-shrink-0" />
-                    {item.name}
-                  </span>
-                </Link>
-              );
-            })}
-          </div>
+        <nav className="flex-1 px-3 overflow-y-auto">
+          <SidebarNav items={navigation} pathname={pathname} />
         </nav>
 
         {/* 底部退出 */}

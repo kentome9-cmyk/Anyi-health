@@ -63,6 +63,8 @@ model Store {
   reports         Report[]
   bodyRecords     BodyRecord[]
   aiAnalyses      AiAnalysis[]
+  creatorIdentity CreatorIdentity?
+  scriptRecords   ScriptRecord[]
 
   @@index([storeUserId])
   @@index([status])
@@ -184,7 +186,6 @@ model BodyRecord {
 // AI 设置表
 model AiSettings {
   id           String   @id @default(uuid())
-  storeId      String?  // 为空则表示全局设置
   
   // 答复 API（用于对话/分析）
   apiKey       String?  @db.Text
@@ -198,13 +199,26 @@ model AiSettings {
   embeddingBaseUrl   String?  @db.VarChar(500)
   embeddingModelId  String?  @db.VarChar(255)
   
-  systemPrompt String?  @db.Text
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
   @@map("ai_settings")
 }
 
+// 提示词模板表
+model Prompt {
+  id          String   @id @default(uuid())
+  name        String   @db.VarChar(100)     // 提示词名称，如"方案搭配"、"选题策划"
+  type        String   @db.VarChar(50)      // 类型标识，如"plan", "topic"
+  description String?  @db.Text             // 描述说明
+  content     String   @db.Text             // 提示词内容，包含 {变量名} 占位符
+  isActive    Boolean  @default(true)       // 是否启用
+  sortOrder   Int      @default(0)          // 排序
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("prompt")
+}
 // AI 分析记录表
 model AiAnalysis {
   id              String   @id @default(uuid())
@@ -244,4 +258,48 @@ model KnowledgeBase {
   updatedAt       DateTime @updatedAt
 
   @@map("knowledge_base")
+}
+
+
+
+// ============================================
+// 短视频创作 - 创作者身份（全局唯一）
+// ============================================
+model CreatorIdentity {
+  id              String   @id @default(uuid())
+  storeId         String   @unique
+  contentTrack    String   @db.VarChar(100)     // 内容赛道
+  personaStyle    String   @db.VarChar(200)     // 人设风格
+  targetAudience  String   @db.VarChar(500)     // 目标受众
+  videoTone       String?  @db.VarChar(100)     // 视频调性
+  videoDuration   String?  @db.VarChar(100)     // 视频时长
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  // 关联
+  store           Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  @@map("creator_identity")
+}
+
+// ============================================
+// 短视频创作 - 脚本记录表
+// ============================================
+model ScriptRecord {
+  id              String   @id @default(uuid())
+  storeId         String
+  type            String   @db.VarChar(20)       // original/rewrite
+  topic           String?  @db.VarChar(255)      // 选题标题
+  corePoints      String?  @db.Text              // 核心观点
+  sourceContent   String?  @db.Text              // 原文（改写模式）
+  templateName    String?  @db.VarChar(200)     // 使用的模板名称
+  content         String   @db.Text              // 生成的脚本内容
+  createdAt       DateTime @default(now())
+
+  // 关联
+  store           Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+
+  @@index([storeId])
+  @@index([type])
+  @@map("script_records")
 }

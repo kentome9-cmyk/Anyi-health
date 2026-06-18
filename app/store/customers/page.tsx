@@ -29,7 +29,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
-import { Search, Plus, FileText, User, Phone, Calendar, Loader2 } from '@/lib/icons';
+import { Search, Plus, FileText, User, Phone, Calendar, Loader2, ChevronRight } from '@/lib/icons';
 
 interface Customer {
   id: string;
@@ -509,32 +509,37 @@ export default function StoreCustomersPage() {
   };
 
   return (
-    <div className="flex-1 overflow-y-auto p-6">
-      {/* 页面标题栏 */}
-      <div className="flex justify-between items-center mb-6">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">客户管理</h1>
-          <p className="text-sm text-gray-500 mt-1">管理客户信息与服务记录</p>
-        </div>
-        <div className="flex items-center gap-4">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-            <Input
-              placeholder="搜索客户姓名或电话..."
-              value={searchKeyword}
-              onChange={(e) => {
-                setSearchKeyword(e.target.value);
-                setCurrentPage(1);
-              }}
-              className="pl-9 w-64"
-            />
+    <div className="flex-1 overflow-y-auto bg-gray-50">
+      {/* 页面标题栏 - 响应式 */}
+      <div className="p-4 md:p-6">
+        <div className="flex flex-col md:flex-row md:justify-between md:items-center gap-3 md:gap-4">
+          <div>
+            <h1 className="text-xl md:text-2xl font-bold text-gray-900">客户管理</h1>
+            <p className="text-sm text-gray-500 mt-0.5 md:mt-1">管理客户信息与服务记录</p>
           </div>
-          <Button onClick={() => router.push(`/store/report-submit?storeId=${storeId}`)}>
-            <Plus className="h-4 w-4 mr-2" />
-            新建客户
-          </Button>
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-3">
+            <div className="relative flex-1 sm:flex-initial">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+              <Input
+                placeholder="搜索姓名或电话..."
+                value={searchKeyword}
+                onChange={(e) => {
+                  setSearchKeyword(e.target.value);
+                  setCurrentPage(1);
+                }}
+                className="pl-9 w-full sm:w-56"
+              />
+            </div>
+            <Button onClick={() => router.push(`/store/report-submit?storeId=${storeId}`)} className="w-full sm:w-auto whitespace-nowrap">
+              <Plus className="h-4 w-4 mr-2" />
+              新建客户
+            </Button>
+          </div>
         </div>
       </div>
+
+      {/* 桌面端：表格视图 */}
+      <div className="hidden md:block px-6 pb-6">
         <Card>
           <CardContent className="p-0">
             {loading ? (
@@ -606,7 +611,7 @@ export default function StoreCustomersPage() {
                   </TableBody>
                 </Table>
 
-                {/* Pagination */}
+                {/* 桌面端分页 */}
                 <div className="flex items-center justify-between px-4 py-3 border-t">
                   <div className="text-sm text-gray-500">
                     共 {total} 位客户
@@ -675,6 +680,116 @@ export default function StoreCustomersPage() {
             )}
           </CardContent>
         </Card>
+      </div>
+
+      {/* 移动端：卡片视图 */}
+      <div className="md:hidden px-4 pb-4 space-y-3">
+        {loading ? (
+          <div className="flex items-center justify-center py-12">
+            <Loader2 className="h-8 w-8 animate-spin text-gray-400" />
+          </div>
+        ) : customers.length === 0 ? (
+          <div className="py-12 text-center text-gray-500 bg-white rounded-lg">
+            {searchKeyword ? '未找到匹配的客户' : '暂无客户数据'}
+          </div>
+        ) : (
+          <>
+            {customers.map((customer) => (
+              <div
+                key={customer.id}
+                className="bg-white rounded-lg border border-gray-200 p-4 active:bg-gray-50 transition-colors"
+              >
+                <div className="flex items-start gap-3">
+                  {/* 头像 */}
+                  <div className="w-10 h-10 rounded-full bg-green-100 flex items-center justify-center text-green-700 font-semibold text-base flex-shrink-0">
+                    {customer.name.charAt(0)}
+                  </div>
+                  {/* 信息 */}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between">
+                      <h3 className="font-semibold text-gray-900">{customer.name}</h3>
+                      <Badge variant="outline" className="text-xs bg-gray-50 border-gray-200 text-gray-600">
+                        {customer.deliveryMethod || '-'}
+                      </Badge>
+                    </div>
+                    <div className="flex items-center gap-1 mt-1 text-xs text-gray-500">
+                      <Phone className="h-3 w-3" />
+                      <span>{customer.phone}</span>
+                    </div>
+                    <div className="flex flex-wrap gap-1.5 mt-2 text-xs text-gray-500">
+                      <span>{customer.age ? `${customer.age}岁` : '-'}</span>
+                      <span className="text-gray-300">·</span>
+                      <span>产后{customer.postpartumDays || '-'}天</span>
+                      <span className="text-gray-300">·</span>
+                      <span className="flex items-center gap-0.5">
+                        <Calendar className="h-3 w-3" />
+                        {customer.lastServiceDate ? formatDate(customer.lastServiceDate) : '-'}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* 操作按钮 */}
+                <div className="flex items-center gap-2 mt-3 pt-3 border-t border-gray-100">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => handleOpenReportList(customer)}
+                    className="flex-1 h-8 text-xs"
+                  >
+                    查看报告
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => handleOpenDetail(customer)}
+                    className="flex-1 h-8 text-xs"
+                  >
+                    查看记录
+                  </Button>
+                  <Button
+                    variant="default"
+                    size="sm"
+                    onClick={() => handleStartAnalysis(customer)}
+                    className="flex-1 h-8 text-xs bg-green-600 hover:bg-green-700"
+                  >
+                    AI分析
+                  </Button>
+                </div>
+              </div>
+            ))}
+
+            {/* 移动端分页 - 简化版 */}
+            <div className="bg-white rounded-lg border border-gray-200 p-3">
+              <div className="flex items-center justify-between">
+                <div className="text-xs text-gray-500">
+                  共 {total} 位 · 第 {currentPage}/{totalPages} 页
+                </div>
+                <div className="flex items-center gap-1">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                    disabled={currentPage === 1}
+                    className="h-8 px-3 text-xs"
+                  >
+                    上一页
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                    disabled={currentPage === totalPages}
+                    className="h-8 px-3 text-xs"
+                  >
+                    下一页
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </>
+        )}
+      </div>
 
       {/* Customer Detail Modal */}
       <Dialog open={showDetailModal} onOpenChange={setShowDetailModal}>
@@ -783,7 +898,7 @@ export default function StoreCustomersPage() {
                             <TableRow key={`assistant-${idx}`}>
                               <TableCell>{project.name}</TableCell>
                               <TableCell className="text-center">
-                                <Badge className="bg-blue-100 text-blue-700 border-blue-300">辅助</Badge>
+                                <Badge className="bg-green-50 text-green-700 border-green-200">辅助</Badge>
                               </TableCell>
                               <TableCell className="text-center text-gray-500">{project.suggestedCount || '-'}</TableCell>
                               <TableCell className="text-center font-medium text-green-700">

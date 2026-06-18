@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { getPromptByType } from '@/lib/prompt';
 
 const DEFAULT_SYSTEM_PROMPT =
   '你是一名产后康复健康管理顾问。请严格根据用户输入和后台配置的提示词回答，不要额外增加未被要求的固定章节或项目推荐。';
@@ -12,7 +13,9 @@ type ChatMessage = {
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { customerId, storeId, messages, reportContent, stream } = body;
+    const { customerId, storeId, messages, reportContent, stream, promptType } = body;
+    const type = promptType || 'plan';
+    console.log(`[AI-Chat] 使用提示词类型: ${type}`);
 
     if (!customerId || !messages || messages.length === 0) {
       return NextResponse.json(
@@ -22,10 +25,10 @@ export async function POST(request: Request) {
     }
 
     if (stream) {
-      return createStreamResponse({ customerId, storeId, messages, reportContent });
+      return createStreamResponse({ customerId, storeId, messages, reportContent, type });
     }
 
-    const reply = await generateAIReply(messages);
+    const reply = await generateAIReply(messages, type);
 
     if (storeId) {
       await prisma.aiAnalysis.create({
@@ -57,11 +60,13 @@ async function createStreamResponse({
   storeId,
   messages,
   reportContent,
+  type = 'plan',
 }: {
   customerId: string;
   storeId?: string;
   messages: Array<{ role: string; content: string }>;
   reportContent?: string;
+  type?: string;
 }) {
   const encoder = new TextEncoder();
 
@@ -74,7 +79,7 @@ async function createStreamResponse({
       };
 
       try {
-        for await (const delta of streamAIReply(messages)) {
+        for await (const delta of streamAIReply(messages, type)) {
           fullReply += delta;
           send({ delta });
         }
@@ -126,9 +131,14 @@ function buildProviderMessages(systemPrompt: string | null | undefined, messages
   ];
 }
 
-async function* streamAIReply(messages: ChatMessage[]): AsyncGenerator<string> {
+async function getAnalysisPrompt(type: string = 'plan'): Promise<string> {
+  const prompt = await getPromptByType(type);
+  console.log(`[AI-Chat] 获取到的 ${type} 提示词:`, prompt ? `${prompt.substring(0, 100)}...` : 'null/empty');
+  return prompt || DEFAULT_SYSTEM_PROMPT;
+}
+
+async function* streamAIReply(messages: ChatMessage[], type: string = 'plan'): AsyncGenerator<string> {
   const settings = await prisma.aiSettings.findFirst({
-    where: { storeId: null },
     orderBy: { createdAt: 'desc' },
   });
 
@@ -139,6 +149,10 @@ async function* streamAIReply(messages: ChatMessage[]): AsyncGenerator<string> {
 
   try {
     const apiUrl = `${settings.baseUrl.replace(/\/$/, '')}/chat/completions`;
+    const systemPrompt = await getAnalysisPrompt(type);
+    console.log(`[AI-Chat] 发送 ${messages.length} 条历史消息 + 1 条 system prompt`);
+    const finalMessages = buildProviderMessages(systemPrompt, messages);
+    console.log(`[AI-Chat] 最终发送 ${finalMessages.length} 条消息 (含 system)`);
     const response = await fetch(apiUrl, {
       method: 'POST',
       headers: {
@@ -148,7 +162,7 @@ async function* streamAIReply(messages: ChatMessage[]): AsyncGenerator<string> {
       body: JSON.stringify({
         model: settings.modelId,
         stream: true,
-        messages: buildProviderMessages(settings.systemPrompt, messages),
+        messages: finalMessages,
         temperature: 0.7,
       }),
     });
@@ -202,9 +216,8 @@ async function* streamText(text: string): AsyncGenerator<string> {
   }
 }
 
-async function generateAIReply(messages: ChatMessage[]): Promise<string> {
+async function generateAIReply(messages: ChatMessage[], type: string = 'plan'): Promise<string> {
   const settings = await prisma.aiSettings.findFirst({
-    where: { storeId: null },
     orderBy: { createdAt: 'desc' },
   });
 
@@ -214,6 +227,10 @@ async function generateAIReply(messages: ChatMessage[]): Promise<string> {
 
   try {
     const apiUrl = `${settings.baseUrl.replace(/\/$/, '')}/chat/completions`;
+    const systemPrompt = await getAnalysisPrompt(type);
+    console.log(`[AI-Chat] 发送 ${messages.length} 条历史消息 + 1 条 system prompt`);
+    const finalMessages = buildProviderMessages(systemPrompt, messages);
+    console.log(`[AI-Chat] 最终发送 ${finalMessages.length} 条消息 (含 system)`);
     const response = await fetch(apiUrl, {
       method: 'POST',
       headers: {
@@ -222,7 +239,7 @@ async function generateAIReply(messages: ChatMessage[]): Promise<string> {
       },
       body: JSON.stringify({
         model: settings.modelId,
-        messages: buildProviderMessages(settings.systemPrompt, messages),
+        messages: finalMessages,
         temperature: 0.7,
       }),
     });

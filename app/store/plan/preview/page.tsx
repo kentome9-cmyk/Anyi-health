@@ -167,8 +167,10 @@ export default function PlanPreviewPage() {
     let analysisData = null;
     let reportId = reportIdParam || '';
     let reportDate = new Date().toLocaleDateString('zh-CN');
+    let needSaveToDb = false;
+    let reportContent = '';
+    let storeIdForReport = '';
 
-    // 🔍 优先从 sessionStorage 读取（避免 URL 过长导致 HTTP 431 错误）
     if (reportIdParam) {
       const storageKey = `plan_${reportIdParam}`;
       try {
@@ -179,13 +181,57 @@ export default function PlanPreviewPage() {
           analysisData = parsed.analysis;
           reportId = parsed.reportId || reportIdParam;
           reportDate = parsed.reportDate || reportDate;
+          needSaveToDb = parsed.needSaveToDb || false;
+          reportContent = parsed.reportContent || '';
+          storeIdForReport = parsed.storeId || '';
         }
       } catch (error) {
         console.error('Failed to read from sessionStorage:', error);
       }
+
+      if (needSaveToDb && storeIdForReport && customerData) {
+        const saveToDb = async () => {
+          try {
+            const res = await fetch('/api/admin/reports', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                storeId: storeIdForReport,
+                customerId: customerData.id,
+                type: 'text',
+                content: reportContent,
+                images: [],
+                structuredData: analysisData,
+              }),
+            });
+            const data = await res.json();
+            if (res.ok && data.id) {
+              const newStorageKey = `plan_${data.id}`;
+              const updatedData = {
+                customer: customerData,
+                analysis: analysisData,
+                reportId: data.id,
+                reportContent,
+                storeId: storeIdForReport,
+                reportDate,
+                needSaveToDb: false,
+              };
+              try {
+                sessionStorage.setItem(newStorageKey, JSON.stringify(updatedData));
+                sessionStorage.removeItem(storageKey);
+                setReportId(data.id);
+              } catch (storageError) {
+                console.error('Failed to update sessionStorage after save:', storageError);
+              }
+            }
+          } catch (error) {
+            console.error('Failed to save report to DB (async):', error);
+          }
+        };
+        saveToDb();
+      }
     }
 
-    // 📌 向后兼容：如果 sessionStorage 中没有数据，尝试从 URL 参数读取
     if (!customerData || !analysisData) {
       const customerDataStr = searchParams.get('customerData');
       const analysisDataStr = searchParams.get('analysisData');
@@ -206,7 +252,6 @@ export default function PlanPreviewPage() {
       }
     }
 
-    // 设置客户信息
     if (customerData) {
       setCustomer(customerData);
     } else {
@@ -226,7 +271,6 @@ export default function PlanPreviewPage() {
       });
     }
 
-    // 设置分析结果
     if (analysisData) {
       setAnalysisResult(analysisData);
     } else {

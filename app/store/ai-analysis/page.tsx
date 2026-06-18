@@ -957,6 +957,7 @@ export default function AiAnalysisPage() {
         storeId: customer.storeId || storeId,
         messages: [{ role: 'user', content: initialMsg }],
         reportContent: customer.symptoms || '',
+        promptType: 'plan',
       });
       setAnalysisResult(parseAIResponse(reply || mockAIReply));
     } catch (error) {
@@ -1012,6 +1013,7 @@ export default function AiAnalysisPage() {
         customerId: customerInfo.id,
         storeId: customerInfo.storeId || storeId,
         messages: requestMessages,
+        promptType: 'plan',
       });
       if (reply) {
         setAnalysisResult(parseAIResponse(reply));
@@ -1067,55 +1069,36 @@ export default function AiAnalysisPage() {
       .filter((message) => message.role === 'ai' && message.content)
       .map((message) => message.content)
       .join('\n\n');
-    let savedReportId = '';
-    try {
-      const res = await fetch('/api/admin/reports', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          storeId: finalStoreId,
-          customerId: customerInfo.id,
-          type: 'text',
-          content: reportContent,
-          images: [],
-          structuredData: analysisResult,
-        }),
-      });
-      const data = await res.json();
-      if (!res.ok) {
-        throw new Error(data.error || 'Create report failed');
-      }
-      savedReportId = data.id;
-    } catch (error) {
-      console.error('Failed to save report:', error);
-      return;
-    }
 
-    // ✅ 使用 sessionStorage 存储大数据，避免 URL 过长导致 HTTP 431 错误
-    const reportKey = `plan_${savedReportId}`;
+    // 用时间戳生成临时 ID 作为 sessionStorage key
+    const tempReportId = `temp_${Date.now()}`;
+    const reportKey = `plan_${tempReportId}`;
+
     try {
       sessionStorage.setItem(
         reportKey,
         JSON.stringify({
           customer: customerInfo,
           analysis: analysisResult,
-          reportId: savedReportId,
+          reportId: tempReportId,
+          reportContent,
+          storeId: finalStoreId,
           reportDate: new Date().toLocaleDateString('zh-CN'),
+          needSaveToDb: true,
         })
       );
     } catch (storageError) {
       console.error('Failed to save to sessionStorage:', storageError);
+      return;
     }
 
-    // URL 只传递 reportId，从 sessionStorage 读取数据
-    const queryParams = new URLSearchParams({
-      reportId: savedReportId,
-    });
+    // 直接跳转，不等待数据库写入
+    const queryParams = new URLSearchParams({ reportId: tempReportId });
     router.push(`/store/plan/preview?${queryParams.toString()}`);
   };
 
   return (
-    <div className="flex-1 flex flex-col bg-gray-50 overflow-hidden">
+    <div className="h-full flex flex-col bg-gray-50 overflow-hidden">
       {/* 顶部标题栏 */}
       <div className="flex justify-between items-center px-6 py-5 flex-shrink-0">
         <div>
@@ -1165,17 +1148,17 @@ export default function AiAnalysisPage() {
       </Card>
 
       {/* 主内容区 */}
-      <div className="flex-1 overflow-hidden px-6 pb-6 min-h-0">
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 h-full min-h-0">
+      <div className="flex-1 min-h-0 overflow-hidden px-6 pb-6 flex flex-col">
+        <div className="flex flex-col lg:flex-row gap-4 flex-1 min-h-0">
           {/* 左侧：对话 */}
-          <Card className="flex flex-col h-full overflow-hidden">
+          <Card className="flex flex-col flex-1 min-h-0 overflow-hidden">
             <CardHeader className="pb-2 flex-shrink-0">
               <CardTitle className="text-sm flex items-center gap-2">
                 对话分析
                 <Sparkles className="h-4 w-4 text-yellow-500" />
               </CardTitle>
             </CardHeader>
-            <CardContent className="flex-1 flex flex-col overflow-hidden p-3">
+            <CardContent className="flex-1 min-h-0 flex flex-col overflow-hidden p-3">
               <div className="flex-1 overflow-y-auto space-y-2 mb-2 min-h-0">
                 {messages.map((message) => (
                   <div
@@ -1268,14 +1251,14 @@ export default function AiAnalysisPage() {
           </Card>
 
           {/* 右侧：分析结果 */}
-          <Card className="flex flex-col h-full overflow-hidden">
+          <Card className="flex flex-col flex-1 min-h-0 overflow-hidden">
             <CardHeader className="pb-2 flex-shrink-0">
               <CardTitle className="text-sm flex items-center gap-2">
                 方案摘要
                 <Heart className="h-4 w-4 text-red-500" />
               </CardTitle>
             </CardHeader>
-            <CardContent className="flex-1 overflow-y-auto p-3 space-y-3">
+            <CardContent className="flex-1 overflow-y-auto p-3 space-y-3 min-h-0">
               {/* 症状分析 */}
               <div className="bg-white border border-gray-200 rounded-lg p-3">
                 <h4 className="text-xs font-semibold text-gray-700 mb-2">身体状况</h4>
@@ -1327,7 +1310,7 @@ export default function AiAnalysisPage() {
                       {analysisResult.projectRecommendations.auxiliary.slice(0, 4).map((proj, idx) => (
                         <div key={idx} className="flex justify-between text-xs py-0.5">
                           <span className="text-gray-800">{proj.name}</span>
-                          <span className="text-blue-600 font-medium">{proj.count}</span>
+                          <span className="text-green-600 font-medium">{proj.count}</span>
                         </div>
                       ))}
                     </div>
@@ -1340,13 +1323,13 @@ export default function AiAnalysisPage() {
                   </p>
                 )}
                 {analysisResult.projectRecommendations.cycle && (
-                  <p className="mt-2 text-xs text-blue-700 bg-blue-50 p-2 rounded leading-relaxed">
+                  <p className="mt-2 text-xs text-green-700 bg-green-50 p-2 rounded leading-relaxed">
                     <span className="font-medium">调理周期：</span>
                     {analysisResult.projectRecommendations.cycle}
                   </p>
                 )}
                 {analysisResult.projectRecommendations.effect && (
-                  <p className="mt-2 text-xs text-emerald-700 bg-emerald-50 p-2 rounded leading-relaxed">
+                  <p className="mt-2 text-xs text-green-700 bg-green-50 p-2 rounded leading-relaxed">
                     <span className="font-medium">预期效果：</span>
                     {analysisResult.projectRecommendations.effect}
                   </p>

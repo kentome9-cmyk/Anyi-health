@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import Link from 'next/link';
-import { Store, Users, BookOpen, Settings, FileText, ScrollText } from '@/lib/icons';
+import { Store, Users, BookOpen, Settings, FileText, ScrollText, Bot, MessageSquare, ClipboardList } from '@/lib/icons';
 
 interface Stats {
   totalStores: number;
@@ -40,11 +40,14 @@ export default function AdminDashboard() {
   ];
 
   const quickActions = [
-    { title: '门店管理', description: '添加、编辑、删除门店', href: '/admin/stores', icon: Store },
-    { title: '客户管理', description: '查看和管理所有客户', href: '/admin/customers', icon: Users },
-    { title: '对话记录', description: '查看AI对话记录', href: '/admin/plan-records', icon: ScrollText },
-    { title: '知识库', description: '管理产后健康知识', href: '/admin/knowledge-base', icon: BookOpen },
-    { title: 'AI 设置', description: '配置 AI 分析参数', href: '/admin/ai-settings', icon: Settings },
+    { title: '门店管理', description: '管理门店信息', href: '/admin/stores', icon: Store },
+    { title: '客户管理', description: '查看客户列表', href: '/admin/customers', icon: Users },
+    { title: '对话记录', description: '查看AI对话', href: '/admin/plan-records', icon: ScrollText },
+    { title: '内容生成', description: 'AI内容生成', href: '/admin/ai-content', icon: FileText },
+    { title: '问答管理', description: '管理问答库', href: '/admin/ai-qa', icon: MessageSquare },
+    { title: '角色模板', description: 'AI角色配置', href: '/admin/ai-roles', icon: ClipboardList },
+    { title: '知识库', description: '管理知识库', href: '/admin/knowledge-base', icon: BookOpen },
+    { title: 'AI 设置', description: 'AI参数配置', href: '/admin/ai-settings', icon: Settings },
   ];
 
   return (
@@ -78,7 +81,7 @@ export default function AdminDashboard() {
           <CardDescription>快速访问常用功能</CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4">
+          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-4 gap-4">
             {quickActions.map((action) => (
               <Link key={action.title} href={action.href}>
                 <Card className="hover:bg-gray-50 transition-colors cursor-pointer h-full">

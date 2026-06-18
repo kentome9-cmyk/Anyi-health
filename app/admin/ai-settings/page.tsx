@@ -4,26 +4,20 @@ import { useState, useEffect } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
 import { Save, CheckCircle, MessageSquare, Database, Play, Loader2 } from '@/lib/icons';
 
 interface AiSettings {
   id?: string;
-  // 答复 API
   apiKey: string | null;
   agentId: string | null;
   datasetId: string | null;
   baseUrl: string | null;
   modelId: string | null;
-  // 向量 API
   embeddingApiKey: string | null;
   embeddingBaseUrl: string | null;
   embeddingModelId: string | null;
-  // 系统
-  systemPrompt: string | null;
-  storeId: string | null;
   createdAt?: string;
   updatedAt?: string;
 }
@@ -44,8 +38,6 @@ export default function AdminAiSettingsPage() {
     embeddingApiKey: '',
     embeddingBaseUrl: '',
     embeddingModelId: '',
-    systemPrompt: '',
-    storeId: null,
   });
   const [saved, setSaved] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -70,8 +62,6 @@ export default function AdminAiSettingsPage() {
           embeddingApiKey: data.embeddingApiKey || '',
           embeddingBaseUrl: data.embeddingBaseUrl || '',
           embeddingModelId: data.embeddingModelId || '',
-          systemPrompt: data.systemPrompt || '',
-          storeId: data.storeId || null,
         });
       }
     } catch (error) {
@@ -164,11 +154,11 @@ export default function AdminAiSettingsPage() {
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
-              <MessageSquare className="h-5 w-5 text-blue-600" />
+              <MessageSquare className="h-5 w-5 text-green-600" />
               答复 API
             </CardTitle>
             <CardDescription>
-              用于 AI 对话和分析的 API 配置
+              用于 AI 对话、分析和内容生成的 API 配置
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -304,25 +294,6 @@ export default function AdminAiSettingsPage() {
           </CardContent>
         </Card>
       </div>
-
-      {/* 系统提示词 - 占满整行 */}
-      <Card>
-        <CardHeader>
-          <CardTitle>系统提示词</CardTitle>
-          <CardDescription>定义 AI 助手的行为和角色</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Textarea
-            value={settings.systemPrompt || ''}
-            onChange={(e) => handleChange('systemPrompt', e.target.value)}
-            className="h-40"
-            placeholder="请输入系统提示词..."
-          />
-          <p className="text-sm text-gray-500 mt-2">
-            提示词将影响 AI 生成内容的风格和准确性，建议根据业务需求调整。
-          </p>
-        </CardContent>
-      </Card>
 
       {/* 使用说明 */}
       <Card>

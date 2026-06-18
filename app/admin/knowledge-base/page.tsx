@@ -594,7 +594,7 @@ export default function AdminKnowledgeBasePage() {
 
       {/* 添加 / 编辑 弹窗 */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="!max-w-[700px] !w-[95vw] max-h-[90vh] overflow-y-auto [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-track]:bg-gray-100 [&::-webkit-scrollbar-track]:rounded-full [&::-webkit-scrollbar-thumb]:bg-gray-300 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:hover:bg-gray-400">
           <DialogHeader>
             <DialogTitle>{editingItem ? '编辑知识' : '添加知识'}</DialogTitle>
           </DialogHeader>
@@ -746,7 +746,7 @@ export default function AdminKnowledgeBasePage() {
 
       {/* 批量导入确认 */}
       <Dialog open={importOpen} onOpenChange={setImportOpen}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="!max-w-[500px] !w-[95vw]">
           <DialogHeader>
             <DialogTitle>批量导入知识库</DialogTitle>
           </DialogHeader>
