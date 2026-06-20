@@ -7,7 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
-import { Loader2, Search, MessageCircle, Zap } from '@/lib/icons';
+import { Loader2, Search, MessageCircle, Zap, Send } from '@/lib/icons';
 
 interface Role {
   id: string;

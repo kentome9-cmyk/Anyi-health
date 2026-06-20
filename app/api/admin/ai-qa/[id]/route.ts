@@ -8,7 +8,7 @@ interface RouteParams {
 export async function GET(request: Request, { params }: RouteParams) {
   try {
     const { id } = await params;
-    const item = await prisma.qAItem.findUnique({
+    const item = await prisma.qaItem.findUnique({
       where: { id },
       include: {
         role: {
@@ -40,7 +40,7 @@ export async function PUT(request: Request, { params }: RouteParams) {
     const body = await request.json();
     const { question, answer, category, keywords, roleId, isActive } = body;
 
-    const item = await prisma.qAItem.update({
+    const item = await prisma.qaItem.update({
       where: { id },
       data: {
         question,
@@ -65,7 +65,7 @@ export async function PUT(request: Request, { params }: RouteParams) {
 export async function DELETE(request: Request, { params }: RouteParams) {
   try {
     const { id } = await params;
-    await prisma.qAItem.delete({
+    await prisma.qaItem.delete({
       where: { id },
     });
 

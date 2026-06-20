@@ -305,6 +305,9 @@ export default function StoreCustomersPage() {
         setCustomerPlans([
           {
             id: 'mock-plan-1',
+            version: 1,
+            status: 'active',
+            isLatest: true,
             coreProjects: [
               { name: '骨盆修复', suggestedCount: '10' },
               { name: '腹直肌修复', suggestedCount: '8' },
@@ -321,6 +324,8 @@ export default function StoreCustomersPage() {
               'assistant_肩颈放松': '2',
               'assistant_温灸调理': '3',
             },
+            createdAt: new Date().toISOString(),
+            completedAt: null,
           },
         ]);
       }
@@ -328,28 +333,6 @@ export default function StoreCustomersPage() {
       console.error('Failed to load customer plans:', error);
       setCustomerPlans([]);
       return;
-      // 模拟数据
-      setCustomerPlans([
-        {
-          id: 'mock-plan-1',
-          coreProjects: [
-            { name: '骨盆修复', suggestedCount: '10' },
-            { name: '腹直肌修复', suggestedCount: '8' },
-            { name: '盆底肌修复', suggestedCount: '12' },
-          ],
-          assistantProjects: [
-            { name: '肩颈放松', suggestedCount: '5' },
-            { name: '温灸调理', suggestedCount: '6' },
-          ],
-          actualCounts: {
-            'core_骨盆修复': '6',
-            'core_腹直肌修复': '4',
-            'core_盆底肌修复': '8',
-            'assistant_肩颈放松': '2',
-            'assistant_温灸调理': '3',
-          },
-        },
-      ]);
     }
   };
 
@@ -470,7 +453,7 @@ export default function StoreCustomersPage() {
           project: '',
           count: 1,
           remark: '',
-          planId: selectedPlanId,
+          planId: selectedPlanId || '',
         });
         setShowAddRecord(false);
         setShowProjectDropdown(false);

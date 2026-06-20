@@ -90,7 +90,7 @@ ${identity.videoDuration ? `视频时长：${identity.videoDuration}` : ''}
     const data = await response.json();
     const content = data.choices?.[0]?.message?.content || '';
 
-    let topics = [];
+    let topics: { title: string; summary: string; angle: string }[] = [];
 
     try {
       const jsonMatch = content.match(/\[.*\]/s);
@@ -100,8 +100,8 @@ ${identity.videoDuration ? `视频时长：${identity.videoDuration}` : ''}
         topics = [];
       }
     } catch (e) {
-      const lines = content.split('\n').filter(line => line.trim());
-      topics = lines.slice(0, 10).map((line, idx) => ({
+      const lines = content.split('\n').filter((line: string) => line.trim());
+      topics = lines.slice(0, 10).map((line: string, idx: number) => ({
         title: line.replace(/^\d+\.\s*/, '').slice(0, 50),
         summary: 'AI 生成选题',
         angle: '参考标题',

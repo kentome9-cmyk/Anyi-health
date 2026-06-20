@@ -64,4 +64,6 @@ export {
   LogOut,
   Lightbulb,
   Link,
+  Filter,
+  SlidersHorizontal,
 } from 'lucide-react';

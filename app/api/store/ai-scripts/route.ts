@@ -25,9 +25,12 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { storeId, type, topic, corePoints, sourceContent, templateName, content } = body;
+    const { storeId, type, topic, corePoints, sourceContent, templateName, content, scriptContent, title } = body;
 
-    if (!storeId || !content) {
+    // 兼容 content 或 scriptContent
+    const scriptContentData = content || scriptContent;
+
+    if (!storeId || !scriptContentData) {
       return NextResponse.json({ error: '缺少必要参数' }, { status: 400 });
     }
 
@@ -35,11 +38,11 @@ export async function POST(request: Request) {
       data: {
         storeId,
         type: type || 'original',
-        topic: topic || null,
+        topic: topic || title || null,
         corePoints: corePoints || null,
         sourceContent: sourceContent || null,
         templateName: templateName || null,
-        content,
+        content: scriptContentData,
       },
     });
 

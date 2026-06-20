@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { getOpenAIInstance } from '@/lib/openai';
+import { getOpenAIConfig } from '@/lib/openai';
 
 export async function POST(request: Request) {
   try {
@@ -28,13 +28,19 @@ export async function POST(request: Request) {
       });
     }
 
+    // 获取 AI 配置
+    const config = await getOpenAIConfig();
+    if (!config) {
+      return NextResponse.json({ error: 'AI 未配置' }, { status: 500 });
+    }
+
     // 构建知识库上下文
     const knowledgeContext = qaItems
       .map(item => `Q: ${item.question}\nA: ${item.answer}`)
       .join('\n\n');
 
     // 调用 AI 进行匹配
-    const openai = getOpenAIInstance();
+    const apiUrl = `${config.baseUrl.replace(/\/$/, '')}/chat/completions`;
     const messages: { role: 'system' | 'user'; content: string }[] = [];
 
     // 系统提示词
@@ -57,13 +63,25 @@ ${knowledgeContext}
       content: query,
     });
 
-    const completion = await openai.chat.completions.create({
-      model: 'gpt-4o-mini',
-      messages,
-      temperature: 0.7,
+    const response = await fetch(apiUrl, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${config.apiKey}`,
+      },
+      body: JSON.stringify({
+        model: config.modelId,
+        messages,
+        temperature: 0.7,
+      }),
     });
 
-    const answer = completion.choices[0]?.message?.content || '';
+    if (!response.ok) {
+      throw new Error(`AI API error: ${response.status}`);
+    }
+
+    const data = await response.json();
+    const answer = data.choices?.[0]?.message?.content || '';
 
     // 查找相关问答（简单的关键词匹配）
     const related = qaItems

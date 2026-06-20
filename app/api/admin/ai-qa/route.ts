@@ -18,7 +18,7 @@ export async function GET(request: Request) {
       ];
     }
 
-    const items = await prisma.qAItem.findMany({
+    const items = await prisma.qaItem.findMany({
       where,
       orderBy: [{ category: 'asc' }, { createdAt: 'desc' }],
       include: {
@@ -29,7 +29,7 @@ export async function GET(request: Request) {
     });
 
     // 获取所有分类
-    const categories = await prisma.qAItem.findMany({
+    const categories = await prisma.qaItem.findMany({
       where: roleId ? { roleId } : {},
       select: { category: true },
       distinct: ['category'],
@@ -61,7 +61,7 @@ export async function POST(request: Request) {
       );
     }
 
-    const item = await prisma.qAItem.create({
+    const item = await prisma.qaItem.create({
       data: {
         question,
         answer,

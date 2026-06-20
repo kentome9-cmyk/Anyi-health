@@ -163,8 +163,8 @@ export default function PlanPreviewPage() {
 
   useEffect(() => {
     const reportIdParam = searchParams.get('reportId');
-    let customerData = null;
-    let analysisData = null;
+    let customerData: Customer | null = null;
+    let analysisData: AnalysisResult | null = null;
     let reportId = reportIdParam || '';
     let reportDate = new Date().toLocaleDateString('zh-CN');
     let needSaveToDb = false;
@@ -191,6 +191,7 @@ export default function PlanPreviewPage() {
 
       if (needSaveToDb && storeIdForReport && customerData) {
         const saveToDb = async () => {
+          if (!customerData || !analysisData) return;
           try {
             const res = await fetch('/api/admin/reports', {
               method: 'POST',

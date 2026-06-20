@@ -36,6 +36,7 @@ const navigation = [
     icon: Bot,
     children: [
       { name: '内容生成', href: '/admin/ai-content', icon: FileText },
+      { name: '脚本库管理', href: '/admin/ai-scripts', icon: FileText },
       { name: '问答管理', href: '/admin/ai-qa', icon: MessageSquare },
       { name: '提示词管理', href: '/admin/prompts', icon: Lightbulb },
     ],

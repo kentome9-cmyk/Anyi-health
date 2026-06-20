@@ -24,6 +24,7 @@ function findBestMatch(items: NavItem[], pathname: string | null): { activeHref:
   const parentHasActiveChild = new Set<string>();
 
   function checkItems(items: NavItem[], parentName?: string) {
+    if (!pathname) return;
     for (const item of items) {
       if (item.href) {
         const matches = pathname === item.href || pathname.startsWith(item.href + '/');

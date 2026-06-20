@@ -22,7 +22,7 @@ export async function GET(request: Request) {
     });
 
     // 获取所有可用的角色
-    const roles = await prisma.aIRole.findMany({
+    const roles = await prisma.aiRole.findMany({
       where: { isActive: true, category: 'generation' },
       orderBy: { sortOrder: 'asc' },
       select: { id: true, name: true, description: true },
