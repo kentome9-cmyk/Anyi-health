@@ -198,7 +198,7 @@ app/
 │   ├── knowledge-base/   # 知识库
 │   ├── prompts/          # 提示词模板
 │   ├── ai-settings/      # AI 参数配置
-│   ├── ai-content/       # AI 内容记录
+│   ├── ai-scripts/       # 脚本库管理
 │   ├── ai-qa/            # AI 问答记录
 │   └── plan-records/     # 到店记录
 ├── api/                  # API 路由（admin/ store/ auth）
