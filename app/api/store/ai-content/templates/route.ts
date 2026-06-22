@@ -4,31 +4,26 @@ import { prisma } from '@/lib/prisma';
 export async function GET(request: Request) {
   try {
     const url = new URL(request.url);
-    const roleId = url.searchParams.get('roleId');
+    const type = url.searchParams.get('type'); // script 或 rewrite
 
-    const where: any = { isActive: true };
-    if (roleId) {
-      where.roleId = roleId;
+    if (!type) {
+      return NextResponse.json({ templates: [], error: '缺少type参数' }, { status: 400 });
     }
 
-    const templates = await prisma.contentTemplate.findMany({
-      where,
-      include: {
-        role: {
-          select: { name: true },
-        },
+    const templates = await prisma.prompt.findMany({
+      where: {
+        type: type,
+        isActive: true,
       },
-      orderBy: [{ usageCount: 'desc' }, { createdAt: 'desc' }],
+      orderBy: [{ sortOrder: 'asc' }, { createdAt: 'desc' }],
     });
 
     const formattedTemplates = templates.map(t => ({
       id: t.id,
       name: t.name,
       description: t.description,
-      prompt: t.prompt,
-      outputFormat: t.outputFormat,
-      exampleOutput: t.exampleOutput,
-      category: t.role?.name || '通用模板',
+      content: t.content, // prompt 字段映射到 content
+      type: t.type,
     }));
 
     return NextResponse.json({ templates: formattedTemplates });

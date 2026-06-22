@@ -39,7 +39,8 @@ interface Prompt {
 const PROMPT_TYPES = [
   { value: 'plan', label: '方案搭配' },
   { value: 'topic', label: '选题策划' },
-  { value: 'analysis', label: 'AI 分析' },
+  { value: 'script', label: '文案创作' },
+  { value: 'rewrite', label: '文案改写' },
 ];
 
 export default function AdminPromptsPage() {

@@ -35,7 +35,7 @@ import {
 interface ScriptRecord {
   id: string;
   storeId: string;
-  store?: { id: string; name: string };
+  store?: { id: string; storeName: string };
   type: 'original' | 'rewrite';
   topic?: string;
   content: string;
@@ -50,7 +50,7 @@ interface ScriptRecord {
 
 interface Store {
   id: string;
-  name: string;
+  storeName: string;
 }
 
 export default function AdminAIScriptsPage() {
@@ -230,7 +230,7 @@ export default function AdminAIScriptsPage() {
                     <SelectContent>
                       <SelectItem value="all">全部门店</SelectItem>
                       {stores.map(store => (
-                        <SelectItem key={store.id} value={store.id}>{store.name}</SelectItem>
+                        <SelectItem key={store.id} value={store.id}>{store.storeName}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
@@ -329,8 +329,8 @@ export default function AdminAIScriptsPage() {
                             </button>
                           </TableCell>
                           <TableCell className="text-center">
-                            <span className="text-xs truncate max-w-[90px] block" title={script.store?.name}>
-                              {script.store?.name || '-'}
+                            <span className="text-xs truncate max-w-[90px] block" title={script.store?.storeName}>
+                              {script.store?.storeName || '-'}
                             </span>
                           </TableCell>
                           <TableCell className="text-center">
@@ -446,7 +446,7 @@ export default function AdminAIScriptsPage() {
               {selectedScript.store && (
                 <div>
                   <Label className="text-xs text-gray-500">门店</Label>
-                  <p className="text-sm">{selectedScript.store.name}</p>
+                  <p className="text-sm">{selectedScript.store.storeName}</p>
                 </div>
               )}
               <div className="grid grid-cols-5 gap-2 text-center">

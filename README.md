@@ -194,7 +194,6 @@ app/
 │   └── plan/preview/     # 方案预览
 ├── admin/                # 后台管理端
 │   ├── stores/           # 门店管理
-│   ├── store-users/      # 门店账号
 │   ├── customers/        # 客户档案
 │   ├── knowledge-base/   # 知识库
 │   ├── prompts/          # 提示词模板

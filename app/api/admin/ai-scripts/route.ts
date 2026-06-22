@@ -33,7 +33,7 @@ export async function GET(request: NextRequest) {
           store: {
             select: {
               id: true,
-              name: true,
+              storeName: true,
             },
           },
         },

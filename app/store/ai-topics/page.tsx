@@ -116,8 +116,13 @@ export default function StoreTopicsPage() {
   };
 
   const handleSaveToScript = async (topic: Topic) => {
-    if (!storeId) return;
+    if (!storeId) {
+      console.log('storeId is null, userType:', userType);
+      alert('请先选择门店');
+      return;
+    }
 
+    console.log('Saving topic:', topic.title, 'to store:', storeId);
     try {
       const res = await fetch('/api/store/ai-scripts', {
         method: 'POST',
@@ -126,11 +131,14 @@ export default function StoreTopicsPage() {
           storeId,
           type: 'original',
           topic: topic.title,
-          content: `【选题标题】${topic.title}\n\n【内容摘要】${topic.summary}\n\n【切入角度】${topic.angle}`,
+          corePoints: `【选题标题】${topic.title}\n\n【内容摘要】${topic.summary}\n\n【切入角度】${topic.angle}`,
         }),
       });
 
+      console.log('API response status:', res.status);
       if (res.ok) {
+        const data = await res.json();
+        console.log('API response data:', data);
         setSavedIds(prev => new Set([...prev, topic.title]));
         // 更新本地状态以显示成功提示
         setTopics(prev => prev.map(t => 
@@ -142,9 +150,13 @@ export default function StoreTopicsPage() {
             t.title === topic.title ? { ...t, savedAt: undefined } : t
           ));
         }, 3000);
+      } else {
+        const data = await res.json();
+        alert(data.error || '保存失败');
       }
     } catch (err) {
       console.error('Failed to save script:', err);
+      alert('保存失败，请重试');
     }
   };
 
@@ -381,7 +393,7 @@ export default function StoreTopicsPage() {
                             variant="outline"
                             size="sm"
                             onClick={() => handleSaveToScript(topic)}
-                            disabled={savedIds.has(topic.title)}
+                            disabled={!_hasHydrated || savedIds.has(topic.title)}
                             className="h-7 px-2 text-xs border-green-200 text-green-700 hover:bg-green-50"
                           >
                             {savedIds.has(topic.title) ? (
@@ -392,11 +404,13 @@ export default function StoreTopicsPage() {
                             ) : (
                               <>
                                 <Library className="h-3 w-3 mr-1" />
-                                存脚本
+                                存选题
                               </>
                             )}
                           </Button>
-                          <NextLink href="/store/ai-content">
+                          <NextLink 
+                            href={`/store/ai-content?topic=${encodeURIComponent(topic.title)}&summary=${encodeURIComponent(topic.summary)}&angle=${encodeURIComponent(topic.angle)}`}
+                          >
                             <Button
                               variant="ghost"
                               size="sm"

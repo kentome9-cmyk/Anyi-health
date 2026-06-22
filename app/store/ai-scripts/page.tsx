@@ -165,12 +165,14 @@ export default function StoreAIScriptsPage() {
   const filteredScripts = scripts.filter(script => {
     return searchKeyword === '' ||
       script.topic?.includes(searchKeyword) ||
+      script.corePoints?.includes(searchKeyword) ||
       script.content.includes(searchKeyword);
   });
 
   const filteredPublicScripts = publicScripts.filter(script => {
     return searchKeyword === '' ||
       script.topic?.includes(searchKeyword) ||
+      script.corePoints?.includes(searchKeyword) ||
       script.content.includes(searchKeyword);
   });
 
@@ -193,7 +195,7 @@ export default function StoreAIScriptsPage() {
       </TableHeader>
       <TableBody>
         {scriptList.map((script) => {
-          const { summary, angle } = extractTopicDirection(script.content);
+          const { summary, angle } = extractTopicDirection(script.corePoints || '');
           return (
             <TableRow key={script.id}>
               <TableCell className="text-xs text-gray-500 text-center">
@@ -383,7 +385,7 @@ export default function StoreAIScriptsPage() {
       </TableHeader>
       <TableBody>
         {scriptList.map((script) => {
-          const { summary, angle } = extractTopicDirection(script.content);
+          const { summary, angle } = extractTopicDirection(script.corePoints || '');
           return (
             <TableRow key={script.id}>
               <TableCell className="text-xs text-gray-500 text-center">
