@@ -36,6 +36,7 @@ export async function POST(request: Request) {
 
     // 如果有模板内容，进行变量替换
     let finalPrompt = templatePrompt || '';
+    console.log('[AI Content] 原始模板 Prompt:', finalPrompt);
     
     // 替换变量占位符
     const variables: Record<string, string> = {
@@ -43,38 +44,34 @@ export async function POST(request: Request) {
       '{personaStyle}': identity.personaStyle || '',
       '{targetAudience}': identity.targetAudience || '',
       '{contentType}': '口播类', // 默认口播类
-      '{topic}': topic || summary || '',
-      '{summary}': summary || '',
-      '{angle}': angle || '',
-      '{supplementary}': corePoints || '',
     };
+
+    // 根据类型添加对应的变量
+    if (type === 'rewrite') {
+      // 改写场景：使用原始文案和改写要求
+      variables['{rawScript}'] = sourceContent || '';
+      variables['{rewriteRequirements}'] = ''; // 可根据需要从前端传入
+    } else {
+      // 原创场景：使用选题信息
+      variables['{topic}'] = topic || summary || '';
+      variables['{summary}'] = summary || '';
+      variables['{angle}'] = angle || '';
+      variables['{supplementary}'] = corePoints || '';
+    }
 
     Object.entries(variables).forEach(([key, value]) => {
       finalPrompt = finalPrompt.replace(new RegExp(key.replace(/[{}]/g, '\\$&'), 'g'), value);
     });
+    console.log('[AI Content] 替换后的 System Prompt:', finalPrompt);
 
     // 构建系统提示词
-    const systemPrompt = finalPrompt;
-
-    let userPrompt = '';
-
-    if (type === 'original') {
-      userPrompt = `请基于以下选题信息创作短视频脚本：
-
-选题标题：${topic || '未提供'}
-内容摘要：${summary || '未提供'}
-切入角度：${angle || '未提供'}
-补充说明：${corePoints || '无'}
-
-请严格按照上述选题信息，创作高质量的短视频脚本。`;
+    let formatInstruction = '';
+    if (type === 'rewrite') {
+      formatInstruction = '\n\n【重要】请直接返回JSON格式，不要使用Markdown代码块包裹。JSON格式：{"titleSuggestion":"推荐标题","rewrittenScript":"改写后的口播文案","shootingTips":["要点1","要点2"],"hashtags":["#标签1"]}';
     } else {
-      userPrompt = `请将以下外网文案改写为符合账号人设的短视频脚本：
-
-原始文案：
-${sourceContent || '未提供'}
-
-请将原文案改写为符合账号赛道、人设风格的专属脚本，保持核心信息，进行身份适配改写。`;
+      formatInstruction = '\n\n【重要】请直接返回JSON格式，不要使用Markdown代码块包裹。JSON格式：{"titleSuggestion":"推荐标题","script":"口播文案","shootingTips":["要点1","要点2"],"hashtags":["#标签1"]}';
     }
+    const systemPrompt = finalPrompt + formatInstruction;
 
     const response = await fetch(apiUrl, {
       method: 'POST',
@@ -86,7 +83,6 @@ ${sourceContent || '未提供'}
         model: config.modelId,
         messages: [
           { role: 'system', content: systemPrompt },
-          { role: 'user', content: userPrompt },
         ],
         temperature: 0.75,
       }),
@@ -98,6 +94,9 @@ ${sourceContent || '未提供'}
 
     const data = await response.json();
     const content = data.choices?.[0]?.message?.content || '';
+    const reasoning = data.choices?.[0]?.message?.reasoning || data.choices?.[0]?.reasoning || '';
+    console.log('[AI Content] AI 思考过程:', reasoning);
+    console.log('[AI Content] AI 原始回复:', content);
 
     return NextResponse.json({
       success: true,

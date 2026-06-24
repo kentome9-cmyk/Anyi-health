@@ -28,23 +28,22 @@ import { useAuthStore } from '@/stores/auth.store';
 interface ScriptRecord {
   id: string;
   type: 'original' | 'rewrite';
-  topic?: string;
+  topicId?: string;
+  version: number;
+  topicTitle?: string;
+  summary?: string;
+  angle?: string;
   corePoints?: string;
   sourceContent?: string;
   templateName?: string;
   content: string;
   viewCount: number;
   likeCount: number;
-  commentCount: number;
   favoriteCount: number;
-  rewriteCount: number;
+  commentCount: number;
+  isFilmed?: boolean;
   createdAt: string;
   storeId?: string;
-}
-
-interface StatsUpdate {
-  field: 'viewCount' | 'likeCount' | 'commentCount' | 'favoriteCount';
-  value: number;
 }
 
 export default function StoreAIScriptsPage() {
@@ -57,8 +56,6 @@ export default function StoreAIScriptsPage() {
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [searchKeyword, setSearchKeyword] = useState('');
   const [selectedScript, setSelectedScript] = useState<ScriptRecord | null>(null);
-  const [statsDialog, setStatsDialog] = useState<{ open: boolean; script: ScriptRecord | null }>({ open: false, script: null });
-  const [statsForm, setStatsForm] = useState<StatsUpdate>({ field: 'viewCount', value: 0 });
 
   useEffect(() => {
     if (!_hasHydrated) return;
@@ -98,7 +95,19 @@ export default function StoreAIScriptsPage() {
   };
 
   const handleCopy = async (content: string, id: string) => {
-    await navigator.clipboard.writeText(content);
+    // 尝试从JSON中提取口播逐字稿（支持原创的script和改写的rewrittenScript）
+    let textToCopy = content;
+    try {
+      const json = JSON.parse(content);
+      if (json.rewrittenScript && typeof json.rewrittenScript === 'string') {
+        textToCopy = json.rewrittenScript;
+      } else if (json.script && typeof json.script === 'string') {
+        textToCopy = json.script;
+      }
+    } catch {
+      // 如果不是有效的JSON，保持原样
+    }
+    await navigator.clipboard.writeText(textToCopy);
     setCopiedId(id);
     setTimeout(() => setCopiedId(null), 2000);
   };
@@ -113,32 +122,18 @@ export default function StoreAIScriptsPage() {
     }
   };
 
-  const handleUpdateStats = async () => {
-    if (!statsDialog.script) return;
+  const handleToggleFilmed = async (id: string, currentValue: boolean) => {
     try {
-      const res = await fetch(`/api/store/ai-scripts/${statsDialog.script.id}/stats`, {
-        method: 'PUT',
+      await fetch(`/api/store/ai-scripts/${id}/filmed?storeId=${storeId}`, {
+        method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ field: statsForm.field, value: statsForm.value }),
+        body: JSON.stringify({ isFilmed: !currentValue }),
       });
-      if (res.ok) {
-        const updateScript = (prev: ScriptRecord[]) => prev.map(s =>
-          s.id === statsDialog.script!.id
-            ? { ...s, [statsForm.field]: statsForm.value }
-            : s
-        );
-        setScripts(updateScript);
-        setPublicScripts(updateScript);
-        setStatsDialog({ open: false, script: null });
-      }
+      setScripts(prev => prev.map(s => s.id === id ? { ...s, isFilmed: !currentValue } : s));
+      setPublicScripts(prev => prev.map(s => s.id === id ? { ...s, isFilmed: !currentValue } : s));
     } catch (error) {
-      console.error('Failed to update stats:', error);
+      console.error('Failed to update filmed status:', error);
     }
-  };
-
-  const openStatsDialog = (script: ScriptRecord, field: StatsUpdate['field']) => {
-    setStatsDialog({ open: true, script });
-    setStatsForm({ field, value: script[field] });
   };
 
   const extractTopicDirection = (content: string) => {
@@ -150,28 +145,41 @@ export default function StoreAIScriptsPage() {
     };
   };
 
+  const extractScriptMetadata = (content: string) => {
+    try {
+      let jsonStr = content;
+      if (content.includes('```json')) {
+        jsonStr = content.replace(/```json\n?/g, '').replace(/```+\n?/g, '').trim();
+      } else if (content.includes('```')) {
+        jsonStr = content.replace(/```+\n?/g, '').trim();
+      }
+      const json = JSON.parse(jsonStr);
+      return {
+        titleSuggestion: json.titleSuggestion || '',
+        script: json.rewrittenScript || json.script || '',
+        hashtags: Array.isArray(json.hashtags) ? json.hashtags.slice(0, 3) : [],
+        shootingTips: Array.isArray(json.shootingTips) ? json.shootingTips.slice(0, 3) : [],
+      };
+    } catch {
+      return { titleSuggestion: '', script: '', hashtags: [], shootingTips: [] };
+    }
+  };
+
   const formatDate = (dateStr: string) => {
     const date = new Date(dateStr);
     return date.toLocaleString('zh-CN', { month: '2-digit', day: '2-digit' });
   };
 
-  const fieldLabels: Record<StatsUpdate['field'], string> = {
-    viewCount: '播放量',
-    likeCount: '点赞量',
-    commentCount: '评论量',
-    favoriteCount: '收藏量',
-  };
-
   const filteredScripts = scripts.filter(script => {
     return searchKeyword === '' ||
-      script.topic?.includes(searchKeyword) ||
+      script.topicTitle?.includes(searchKeyword) ||
       script.corePoints?.includes(searchKeyword) ||
       script.content.includes(searchKeyword);
   });
 
   const filteredPublicScripts = publicScripts.filter(script => {
     return searchKeyword === '' ||
-      script.topic?.includes(searchKeyword) ||
+      script.topicTitle?.includes(searchKeyword) ||
       script.corePoints?.includes(searchKeyword) ||
       script.content.includes(searchKeyword);
   });
@@ -180,184 +188,70 @@ export default function StoreAIScriptsPage() {
     <Table>
       <TableHeader>
         <TableRow>
-          <TableHead className="w-[50px] text-center">日期</TableHead>
+          <TableHead className="w-[60px] text-center">日期</TableHead>
+          <TableHead className="w-[50px] text-center">版本</TableHead>
+          <TableHead className="w-[70px] text-center">类型</TableHead>
           <TableHead className="w-[120px] text-center">选题</TableHead>
-          <TableHead className="w-[200px] text-center">选题方向</TableHead>
-          <TableHead className="w-[70px] text-center">去创作</TableHead>
-          <TableHead className="w-[70px] text-center">创作内容</TableHead>
-          <TableHead className="w-[70px] text-center">播放量</TableHead>
-          <TableHead className="w-[70px] text-center">点赞量</TableHead>
-          <TableHead className="w-[70px] text-center">评论量</TableHead>
-          <TableHead className="w-[70px] text-center">收藏量</TableHead>
-          <TableHead className="w-[70px] text-center">去仿写</TableHead>
-          <TableHead className="w-[60px] text-center">仿写次数</TableHead>
+          <TableHead className="w-[80px] text-center">播放/点赞</TableHead>
+          <TableHead className="w-[80px] text-center">状态</TableHead>
+          <TableHead className="w-[120px] text-center">操作</TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
         {scriptList.map((script) => {
-          const { summary, angle } = extractTopicDirection(script.corePoints || '');
+          const { titleSuggestion, script: scriptContent, hashtags, shootingTips } = extractScriptMetadata(script.content);
+          const displayContent = scriptContent || script.content.substring(0, 50);
           return (
             <TableRow key={script.id}>
               <TableCell className="text-xs text-gray-500 text-center">
                 {formatDate(script.createdAt)}
               </TableCell>
+              <TableCell className="text-center">
+                <span className="text-xs font-medium text-gray-700">v{script.version || 1}</span>
+              </TableCell>
+              <TableCell className="text-center">
+                <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium ${
+                  script.type === 'rewrite' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'
+                }`}>
+                  {script.type === 'rewrite' ? '改写' : '原创'}
+                </span>
+              </TableCell>
               <TableCell>
-                <div className="text-sm font-medium truncate max-w-[110px] text-center" title={script.topic || '无标题'}>
-                  {script.topic || '无标题'}
+                <div className="text-xs font-medium truncate max-w-[110px] text-center" title={script.topicTitle || '无标题'}>
+                  {script.topicTitle || '无标题'}
                 </div>
               </TableCell>
               <TableCell>
-                <div className="text-xs text-gray-600 max-w-[190px]">
-                  {summary && <div className="truncate" title={summary}>{summary}</div>}
-                  {angle && <div className="text-green-600 truncate" title={angle}>💡 {angle}</div>}
-                  {!summary && !angle && <span className="text-gray-400">-</span>}
+                <div className="text-xs text-center">
+                  <span className="text-gray-600">{script.viewCount || 0}</span>
+                  <span className="text-gray-400 mx-0.5">/</span>
+                  <span className="text-gray-600">{script.likeCount || 0}</span>
                 </div>
               </TableCell>
               <TableCell className="text-center">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => router.push('/store/ai-content')}
-                  className="h-7 px-1 text-xs"
-                >
-                  <Send className="h-3 w-3 mr-1" />
-                  创作
-                </Button>
+                <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${script.isFilmed ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'}`}>
+                  {script.isFilmed ? '✓ 已拍摄' : '○ 未拍摄'}
+                </span>
               </TableCell>
               <TableCell className="text-center">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setSelectedScript(script)}
-                  className="h-7 px-1 text-xs"
-                >
-                  <FileText className="h-3 w-3 mr-1" />
-                  查看
-                </Button>
-              </TableCell>
-              <TableCell className="text-center">
-                <Input
-                  type="number"
-                  min="0"
-                  placeholder="点击手动输入"
-                  value={script.viewCount || ''}
-                  onChange={(e) => {
-                    const newValue = parseInt(e.target.value) || 0;
-                    const updateFn = (prev: ScriptRecord[]) => prev.map(s =>
-                      s.id === script.id ? { ...s, viewCount: newValue } : s
-                    );
-                    setScripts(updateFn);
-                    setPublicScripts(updateFn);
-                  }}
-                  onBlur={(e) => {
-                    const newValue = parseInt(e.target.value) || 0;
-                    if (newValue !== script.viewCount) {
-                      fetch(`/api/store/ai-scripts/${script.id}/stats`, {
-                        method: 'PUT',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ field: 'viewCount', value: newValue }),
-                      });
-                    }
-                  }}
-                  className="w-24 h-6 text-xs px-1"
-                />
-              </TableCell>
-              <TableCell className="text-center">
-                <Input
-                  type="number"
-                  min="0"
-                  placeholder="点击手动输入"
-                  value={script.likeCount || ''}
-                  onChange={(e) => {
-                    const newValue = parseInt(e.target.value) || 0;
-                    const updateFn = (prev: ScriptRecord[]) => prev.map(s =>
-                      s.id === script.id ? { ...s, likeCount: newValue } : s
-                    );
-                    setScripts(updateFn);
-                    setPublicScripts(updateFn);
-                  }}
-                  onBlur={(e) => {
-                    const newValue = parseInt(e.target.value) || 0;
-                    if (newValue !== script.likeCount) {
-                      fetch(`/api/store/ai-scripts/${script.id}/stats`, {
-                        method: 'PUT',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ field: 'likeCount', value: newValue }),
-                      });
-                    }
-                  }}
-                  className="w-24 h-6 text-xs px-1"
-                />
-              </TableCell>
-              <TableCell className="text-center">
-                <Input
-                  type="number"
-                  min="0"
-                  placeholder="点击手动输入"
-                  value={script.commentCount || ''}
-                  onChange={(e) => {
-                    const newValue = parseInt(e.target.value) || 0;
-                    const updateFn = (prev: ScriptRecord[]) => prev.map(s =>
-                      s.id === script.id ? { ...s, commentCount: newValue } : s
-                    );
-                    setScripts(updateFn);
-                    setPublicScripts(updateFn);
-                  }}
-                  onBlur={(e) => {
-                    const newValue = parseInt(e.target.value) || 0;
-                    if (newValue !== script.commentCount) {
-                      fetch(`/api/store/ai-scripts/${script.id}/stats`, {
-                        method: 'PUT',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ field: 'commentCount', value: newValue }),
-                      });
-                    }
-                  }}
-                  className="w-24 h-6 text-xs px-1"
-                />
-              </TableCell>
-              <TableCell className="text-center">
-                <Input
-                  type="number"
-                  min="0"
-                  placeholder="点击手动输入"
-                  value={script.favoriteCount || ''}
-                  onChange={(e) => {
-                    const newValue = parseInt(e.target.value) || 0;
-                    const updateFn = (prev: ScriptRecord[]) => prev.map(s =>
-                      s.id === script.id ? { ...s, favoriteCount: newValue } : s
-                    );
-                    setScripts(updateFn);
-                    setPublicScripts(updateFn);
-                  }}
-                  onBlur={(e) => {
-                    const newValue = parseInt(e.target.value) || 0;
-                    if (newValue !== script.favoriteCount) {
-                      fetch(`/api/store/ai-scripts/${script.id}/stats`, {
-                        method: 'PUT',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ field: 'favoriteCount', value: newValue }),
-                      });
-                    }
-                  }}
-                  className="w-24 h-6 text-xs px-1"
-                />
-              </TableCell>
-              <TableCell className="text-center">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => router.push('/store/ai-rewrite')}
-                  className="h-7 px-1 text-xs"
-                >
-                  <Pencil className="h-3 w-3 mr-1" />
-                  仿写
-                </Button>
-              </TableCell>
-              <TableCell className="text-center">
-                <div className="flex items-center justify-center gap-1 text-xs">
-                  <RefreshCw className="h-3 w-3 text-gray-400" />
-                  {script.rewriteCount}
+                <div className="flex gap-1 justify-center">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setSelectedScript(script)}
+                    className="h-7 px-2 text-xs"
+                  >
+                    <FileText className="h-3 w-3 mr-1" />
+                    详情
+                  </Button>
+                  <Button
+                    variant={script.isFilmed ? 'outline' : 'default'}
+                    size="sm"
+                    onClick={() => handleToggleFilmed(script.id, script.isFilmed || false)}
+                    className="h-7 px-2 text-xs"
+                  >
+                    {script.isFilmed ? '取消' : '拍摄'}
+                  </Button>
                 </div>
               </TableCell>
             </TableRow>
@@ -371,172 +265,68 @@ export default function StoreAIScriptsPage() {
     <Table>
       <TableHeader>
         <TableRow>
-          <TableHead className="w-[50px] text-center">日期</TableHead>
+          <TableHead className="w-[60px] text-center">日期</TableHead>
+          <TableHead className="w-[50px] text-center">版本</TableHead>
+          <TableHead className="w-[70px] text-center">类型</TableHead>
           <TableHead className="w-[120px] text-center">选题</TableHead>
-          <TableHead className="w-[200px] text-center">选题方向</TableHead>
-          <TableHead className="w-[70px] text-center">创作内容</TableHead>
-          <TableHead className="w-[70px] text-center">播放量</TableHead>
-          <TableHead className="w-[70px] text-center">点赞量</TableHead>
-          <TableHead className="w-[70px] text-center">评论量</TableHead>
-          <TableHead className="w-[70px] text-center">收藏量</TableHead>
-          <TableHead className="w-[70px] text-center">去仿写</TableHead>
-          <TableHead className="w-[60px] text-center">仿写次数</TableHead>
+          <TableHead className="w-[80px] text-center">播放/点赞</TableHead>
+          <TableHead className="w-[80px] text-center">状态</TableHead>
+          <TableHead className="w-[120px] text-center">操作</TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
         {scriptList.map((script) => {
-          const { summary, angle } = extractTopicDirection(script.corePoints || '');
           return (
             <TableRow key={script.id}>
               <TableCell className="text-xs text-gray-500 text-center">
                 {formatDate(script.createdAt)}
               </TableCell>
+              <TableCell className="text-center">
+                <span className="text-xs font-medium text-gray-700">v{script.version || 1}</span>
+              </TableCell>
+              <TableCell className="text-center">
+                <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium ${
+                  script.type === 'rewrite' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'
+                }`}>
+                  {script.type === 'rewrite' ? '改写' : '原创'}
+                </span>
+              </TableCell>
               <TableCell>
-                <div className="text-sm font-medium truncate max-w-[110px] text-center" title={script.topic || '无标题'}>
-                  {script.topic || '无标题'}
+                <div className="text-xs font-medium truncate max-w-[110px] text-center" title={script.topicTitle || '无标题'}>
+                  {script.topicTitle || '无标题'}
                 </div>
               </TableCell>
               <TableCell>
-                <div className="text-xs text-gray-600 max-w-[190px]">
-                  {summary && <div className="truncate" title={summary}>{summary}</div>}
-                  {angle && <div className="text-green-600 truncate" title={angle}>💡 {angle}</div>}
-                  {!summary && !angle && <span className="text-gray-400">-</span>}
+                <div className="text-xs text-center">
+                  <span className="text-gray-600">{script.viewCount || 0}</span>
+                  <span className="text-gray-400 mx-0.5">/</span>
+                  <span className="text-gray-600">{script.likeCount || 0}</span>
                 </div>
               </TableCell>
               <TableCell className="text-center">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setSelectedScript(script)}
-                  className="h-7 px-1 text-xs"
-                >
-                  <FileText className="h-3 w-3 mr-1" />
-                  查看
-                </Button>
+                <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${script.isFilmed ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'}`}>
+                  {script.isFilmed ? '✓ 已拍摄' : '○ 未拍摄'}
+                </span>
               </TableCell>
               <TableCell className="text-center">
-                <Input
-                  type="number"
-                  min="0"
-                  placeholder="点击手动输入"
-                  value={script.viewCount || ''}
-                  onChange={(e) => {
-                    const newValue = parseInt(e.target.value) || 0;
-                    const updateFn = (prev: ScriptRecord[]) => prev.map(s =>
-                      s.id === script.id ? { ...s, viewCount: newValue } : s
-                    );
-                    setScripts(updateFn);
-                    setPublicScripts(updateFn);
-                  }}
-                  onBlur={(e) => {
-                    const newValue = parseInt(e.target.value) || 0;
-                    if (newValue !== script.viewCount) {
-                      fetch(`/api/store/ai-scripts/${script.id}/stats`, {
-                        method: 'PUT',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ field: 'viewCount', value: newValue }),
-                      });
-                    }
-                  }}
-                  className="w-24 h-6 text-xs px-1"
-                />
-              </TableCell>
-              <TableCell className="text-center">
-                <Input
-                  type="number"
-                  min="0"
-                  placeholder="点击手动输入"
-                  value={script.likeCount || ''}
-                  onChange={(e) => {
-                    const newValue = parseInt(e.target.value) || 0;
-                    const updateFn = (prev: ScriptRecord[]) => prev.map(s =>
-                      s.id === script.id ? { ...s, likeCount: newValue } : s
-                    );
-                    setScripts(updateFn);
-                    setPublicScripts(updateFn);
-                  }}
-                  onBlur={(e) => {
-                    const newValue = parseInt(e.target.value) || 0;
-                    if (newValue !== script.likeCount) {
-                      fetch(`/api/store/ai-scripts/${script.id}/stats`, {
-                        method: 'PUT',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ field: 'likeCount', value: newValue }),
-                      });
-                    }
-                  }}
-                  className="w-24 h-6 text-xs px-1"
-                />
-              </TableCell>
-              <TableCell className="text-center">
-                <Input
-                  type="number"
-                  min="0"
-                  placeholder="点击手动输入"
-                  value={script.commentCount || ''}
-                  onChange={(e) => {
-                    const newValue = parseInt(e.target.value) || 0;
-                    const updateFn = (prev: ScriptRecord[]) => prev.map(s =>
-                      s.id === script.id ? { ...s, commentCount: newValue } : s
-                    );
-                    setScripts(updateFn);
-                    setPublicScripts(updateFn);
-                  }}
-                  onBlur={(e) => {
-                    const newValue = parseInt(e.target.value) || 0;
-                    if (newValue !== script.commentCount) {
-                      fetch(`/api/store/ai-scripts/${script.id}/stats`, {
-                        method: 'PUT',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ field: 'commentCount', value: newValue }),
-                      });
-                    }
-                  }}
-                  className="w-24 h-6 text-xs px-1"
-                />
-              </TableCell>
-              <TableCell className="text-center">
-                <Input
-                  type="number"
-                  min="0"
-                  placeholder="点击手动输入"
-                  value={script.favoriteCount || ''}
-                  onChange={(e) => {
-                    const newValue = parseInt(e.target.value) || 0;
-                    const updateFn = (prev: ScriptRecord[]) => prev.map(s =>
-                      s.id === script.id ? { ...s, favoriteCount: newValue } : s
-                    );
-                    setScripts(updateFn);
-                    setPublicScripts(updateFn);
-                  }}
-                  onBlur={(e) => {
-                    const newValue = parseInt(e.target.value) || 0;
-                    if (newValue !== script.favoriteCount) {
-                      fetch(`/api/store/ai-scripts/${script.id}/stats`, {
-                        method: 'PUT',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ field: 'favoriteCount', value: newValue }),
-                      });
-                    }
-                  }}
-                  className="w-24 h-6 text-xs px-1"
-                />
-              </TableCell>
-              <TableCell className="text-center">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => router.push('/store/ai-rewrite')}
-                  className="h-7 px-1 text-xs"
-                >
-                  <Pencil className="h-3 w-3 mr-1" />
-                  仿写
-                </Button>
-              </TableCell>
-              <TableCell className="text-center">
-                <div className="flex items-center justify-center gap-1 text-xs">
-                  <RefreshCw className="h-3 w-3 text-gray-400" />
-                  {script.rewriteCount}
+                <div className="flex gap-1 justify-center">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setSelectedScript(script)}
+                    className="h-7 px-2 text-xs"
+                  >
+                    <FileText className="h-3 w-3 mr-1" />
+                    详情
+                  </Button>
+                  <Button
+                    variant={script.isFilmed ? 'outline' : 'default'}
+                    size="sm"
+                    onClick={() => handleToggleFilmed(script.id, script.isFilmed || false)}
+                    className="h-7 px-2 text-xs"
+                  >
+                    {script.isFilmed ? '取消' : '拍摄'}
+                  </Button>
                 </div>
               </TableCell>
             </TableRow>
@@ -631,26 +421,64 @@ export default function StoreAIScriptsPage() {
         </Card>
       </div>
 
-      {/* 创作内容弹窗 */}
+      {/* 查看详情弹窗 */}
       <Dialog open={!!selectedScript} onOpenChange={() => setSelectedScript(null)}>
-        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+        <DialogContent className="!max-w-[700px] !w-[95vw] max-h-[80vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>创作内容</DialogTitle>
+            <DialogTitle>脚本详情</DialogTitle>
           </DialogHeader>
           {selectedScript && (
             <div className="space-y-4">
-              {selectedScript.topic && (
+              {selectedScript.topicTitle && (
                 <div>
                   <Label className="text-xs text-gray-500">选题</Label>
-                  <p className="text-sm font-medium">{selectedScript.topic}</p>
+                  <p className="text-sm font-medium">{selectedScript.topicTitle}</p>
                 </div>
               )}
-              <div>
-                <Label className="text-xs text-gray-500">脚本内容</Label>
-                <div className="mt-1 bg-gray-900 text-gray-100 rounded-lg p-4 text-sm leading-relaxed whitespace-pre-wrap max-h-[400px] overflow-y-auto">
-                  {selectedScript.content}
-                </div>
-              </div>
+              {(() => {
+                const { titleSuggestion, script: scriptContent, hashtags, shootingTips } = extractScriptMetadata(selectedScript.content);
+                return (
+                  <>
+                    {titleSuggestion && (
+                      <div>
+                        <Label className="text-xs text-gray-500">推荐标题文案</Label>
+                        <p className="text-sm">{titleSuggestion}</p>
+                      </div>
+                    )}
+                    {hashtags.length > 0 && (
+                      <div>
+                        <Label className="text-xs text-gray-500">标签</Label>
+                        <div className="flex flex-wrap gap-2 mt-1">
+                          {hashtags.map((tag, idx) => (
+                            <span key={idx} className="text-xs px-2 py-1 bg-green-100 text-green-700 rounded">
+                              {tag}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    {shootingTips.length > 0 && (
+                      <div>
+                        <Label className="text-xs text-gray-500">拍摄要点</Label>
+                        <ul className="mt-1 space-y-1">
+                          {shootingTips.map((tip, idx) => (
+                            <li key={idx} className="text-sm flex items-start gap-2">
+                              <span className="text-green-600">{idx + 1}.</span>
+                              <span>{tip}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                    <div>
+                      <Label className="text-xs text-gray-500">口播逐字稿</Label>
+                      <div className="mt-1 bg-gray-900 text-gray-100 rounded-lg p-4 text-sm leading-relaxed whitespace-pre-wrap max-h-[400px] overflow-y-auto">
+                        {scriptContent || selectedScript.content}
+                      </div>
+                    </div>
+                  </>
+                );
+              })()}
               <div className="flex justify-end gap-2">
                 <Button variant="outline" onClick={() => handleCopy(selectedScript.content, selectedScript.id)}>
                   {copiedId === selectedScript.id ? <CheckCheck className="h-4 w-4 mr-2" /> : <Copy className="h-4 w-4 mr-2" />}
@@ -659,33 +487,6 @@ export default function StoreAIScriptsPage() {
               </div>
             </div>
           )}
-        </DialogContent>
-      </Dialog>
-
-      {/* 数据编辑弹窗 */}
-      <Dialog open={statsDialog.open} onOpenChange={(open) => setStatsDialog({ open, script: null })}>
-        <DialogContent className="max-w-sm">
-          <DialogHeader>
-            <DialogTitle>编辑{statsDialog.script && fieldLabels[statsForm.field as StatsUpdate['field']]}</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4">
-            <div>
-              <Label>输入数值</Label>
-              <Input
-                type="number"
-                min="0"
-                value={statsForm.value}
-                onChange={(e) => setStatsForm({ ...statsForm, value: parseInt(e.target.value) || 0 })}
-                className="mt-1"
-              />
-            </div>
-            <div className="flex justify-end gap-2">
-              <Button variant="outline" onClick={() => setStatsDialog({ open: false, script: null })}>
-                取消
-              </Button>
-              <Button onClick={handleUpdateStats}>保存</Button>
-            </div>
-          </div>
         </DialogContent>
       </Dialog>
     </div>

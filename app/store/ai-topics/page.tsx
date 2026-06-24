@@ -12,9 +12,11 @@ import { Loader2, Lightbulb, Sparkles, Lock, User, Wand2, Library, Check, Send }
 import NextLink from 'next/link';
 
 interface Topic {
+  id?: string;
   title: string;
-  summary: string;
-  angle: string;
+  summary?: string;
+  angle?: string;
+  corePoints?: string;
   savedAt?: number;
 }
 
@@ -33,7 +35,7 @@ export default function StoreTopicsPage() {
   // 选题配置
   const [accountStage, setAccountStage] = useState('冷启动期');
   const [contentDirection, setContentDirection] = useState('全部');
-  const [decisionStage, setDecisionStage] = useState('选择困难');
+  const [decisionStage, setDecisionStage] = useState('');
   const [topicCount, setTopicCount] = useState('10');
 
   // 创作者身份
@@ -122,27 +124,29 @@ export default function StoreTopicsPage() {
       return;
     }
 
-    console.log('Saving topic:', topic.title, 'to store:', storeId);
+    const payload = {
+      storeId,
+      topic: topic.title,
+      summary: topic.summary || null,
+      angle: topic.angle || null,
+      corePoints: topic.corePoints || null,
+    };
+    console.log('Saving topic payload:', JSON.stringify(payload, null, 2));
     try {
-      const res = await fetch('/api/store/ai-scripts', {
+      // 调用 /api/store/topics 创建选题
+      const res = await fetch('/api/store/topics', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          storeId,
-          type: 'original',
-          topic: topic.title,
-          corePoints: `【选题标题】${topic.title}\n\n【内容摘要】${topic.summary}\n\n【切入角度】${topic.angle}`,
-        }),
+        body: JSON.stringify(payload),
       });
 
       console.log('API response status:', res.status);
       if (res.ok) {
         const data = await res.json();
         console.log('API response data:', data);
-        setSavedIds(prev => new Set([...prev, topic.title]));
-        // 更新本地状态以显示成功提示
+        // 保存成功后，更新本地状态，标记该选题已保存，并存储返回的topicId
         setTopics(prev => prev.map(t => 
-          t.title === topic.title ? { ...t, savedAt: Date.now() } : t
+          t.title === topic.title ? { ...t, id: data.topic?.id, savedAt: Date.now() } : t
         ));
         // 3秒后清除成功提示
         setTimeout(() => {
@@ -155,7 +159,7 @@ export default function StoreTopicsPage() {
         alert(data.error || '保存失败');
       }
     } catch (err) {
-      console.error('Failed to save script:', err);
+      console.error('Failed to save topic:', err);
       alert('保存失败，请重试');
     }
   };
@@ -271,8 +275,9 @@ export default function StoreTopicsPage() {
               {/* 用户决策阶段 */}
               <div className="space-y-2">
                 <div className="text-sm font-medium">用户决策阶段</div>
-                <div className="grid grid-cols-3 gap-2">
+                <div className="grid grid-cols-4 gap-2">
                   {[
+                    { value: '', label: '不限', sub: '自由发挥' },
                     { value: '选择困难', label: '选择困难', sub: '在犹豫' },
                     { value: '已决定', label: '已决定', sub: '在比较' },
                     { value: '执行中', label: '执行中', sub: '在实施' },
@@ -393,10 +398,10 @@ export default function StoreTopicsPage() {
                             variant="outline"
                             size="sm"
                             onClick={() => handleSaveToScript(topic)}
-                            disabled={!_hasHydrated || savedIds.has(topic.title)}
+                            disabled={!_hasHydrated || !!topic.id}
                             className="h-7 px-2 text-xs border-green-200 text-green-700 hover:bg-green-50"
                           >
-                            {savedIds.has(topic.title) ? (
+                            {topic.id ? (
                               <>
                                 <Check className="h-3 w-3 mr-1" />
                                 已存
@@ -409,7 +414,7 @@ export default function StoreTopicsPage() {
                             )}
                           </Button>
                           <NextLink 
-                            href={`/store/ai-content?topic=${encodeURIComponent(topic.title)}&summary=${encodeURIComponent(topic.summary)}&angle=${encodeURIComponent(topic.angle)}`}
+                            href={`/store/ai-content?topicId=${topic.id || ''}&topic=${encodeURIComponent(topic.title)}&summary=${encodeURIComponent(topic.summary || '')}&angle=${encodeURIComponent(topic.angle || '')}`}
                           >
                             <Button
                               variant="ghost"

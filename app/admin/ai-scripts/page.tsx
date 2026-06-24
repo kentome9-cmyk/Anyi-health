@@ -420,7 +420,7 @@ export default function AdminAIScriptsPage() {
 
       {/* 脚本详情弹窗 */}
       <Dialog open={!!selectedScript} onOpenChange={() => setSelectedScript(null)}>
-        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+        <DialogContent className="max-w-[700px] max-h-[80vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>脚本详情</DialogTitle>
           </DialogHeader>

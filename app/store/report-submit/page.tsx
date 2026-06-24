@@ -483,7 +483,7 @@ export default function ReportSubmitPage() {
 
       {/* 选择客户弹窗 */}
       <Dialog open={showCustomerModal} onOpenChange={setShowCustomerModal}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="max-w-[700px]">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-base">
               <User className="h-4 w-4" />
@@ -559,7 +559,7 @@ export default function ReportSubmitPage() {
 
       {/* 验证错误弹窗 */}
       <Dialog open={showValidationError} onOpenChange={setShowValidationError}>
-        <DialogContent className="max-w-md">
+        <DialogContent className="max-w-[700px]">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-red-600 text-base">
               <X className="h-4 w-4" />

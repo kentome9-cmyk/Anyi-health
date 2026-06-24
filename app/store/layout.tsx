@@ -25,6 +25,7 @@ const sidebarNav = [
     children: [
       { name: '创作者身份', href: '/store/ai-identity', icon: User },
       { name: '选题策划', href: '/store/ai-topics', icon: Lightbulb },
+      { name: '选题库', href: '/store/ai-topic-library', icon: BookOpen },
       { name: '内容创作', href: '/store/ai-content', icon: Wand2 },
       { name: '脚本库', href: '/store/ai-scripts', icon: Library },
     ],

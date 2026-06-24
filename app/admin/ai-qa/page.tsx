@@ -504,7 +504,7 @@ export default function AdminAIQAPage() {
 
       {/* 删除确认对话框 */}
       <Dialog open={!!deleteConfirm} onOpenChange={() => setDeleteConfirm(null)}>
-        <DialogContent className="!max-w-[500px] !w-[95vw]">
+        <DialogContent className="!max-w-[700px] !w-[95vw]">
           <DialogHeader>
             <DialogTitle>确认删除</DialogTitle>
           </DialogHeader>

@@ -746,7 +746,7 @@ export default function AdminKnowledgeBasePage() {
 
       {/* 批量导入确认 */}
       <Dialog open={importOpen} onOpenChange={setImportOpen}>
-        <DialogContent className="!max-w-[500px] !w-[95vw]">
+        <DialogContent className="!max-w-[700px] !w-[95vw]">
           <DialogHeader>
             <DialogTitle>批量导入知识库</DialogTitle>
           </DialogHeader>

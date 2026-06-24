@@ -49,14 +49,27 @@ export async function POST(request: Request) {
 
     const apiUrl = `${settings.baseUrl.replace(/\/$/, '')}/chat/completions`;
 
+    // 获取该门店历史选题标题（用于去重）
+    const existingTopics = await prisma.scriptRecord.findMany({
+      where: { storeId },
+      select: { topicTitle: true },
+      orderBy: { createdAt: 'desc' },
+      take: 50,
+    });
+    const existingTopicTitles = existingTopics
+      .map(t => t.topicTitle)
+      .filter((t): t is string => !!t && t.trim() !== '');
+    console.log('[AI Topics] 历史选题数量:', existingTopicTitles.length);
+
     // 从 Prompt 表获取选题策划提示词（类型为 "topic"）
     const topicPromptTemplate = await getPromptByType('topic');
+    console.log('[AI Topics] 原始提示词模板:', topicPromptTemplate);
 
     // 替换提示词中的占位符
     const variables: Record<string, string> = {
-      accountStage: accountStage || '未知',
-      contentDirection: contentDirection || '全部',
-      decisionStage: decisionStage || '未知',
+      accountStage: accountStage || '不限',
+      contentDirection: contentDirection || '不限',
+      decisionStage: decisionStage || '不限',
       topicCount: String(topicCount || 10),
       contentTrack: identity.contentTrack,
       personaStyle: identity.personaStyle,
@@ -70,6 +83,7 @@ export async function POST(request: Request) {
     } else {
       effectiveSystemPrompt = getDefaultPrompt();
     }
+    console.log('[AI Topics] 替换后的 System Prompt:', effectiveSystemPrompt);
 
     // 构建用户提示词
     const userPrompt = buildUserPrompt({
@@ -82,7 +96,9 @@ export async function POST(request: Request) {
       contentDirection,
       decisionStage,
       topicCount,
+      existingTopicTitles,
     });
+    console.log('[AI Topics] 构建的 User Prompt:', userPrompt);
 
     const response = await fetch(apiUrl, {
       method: 'POST',
@@ -106,6 +122,9 @@ export async function POST(request: Request) {
 
     const data = await response.json();
     const content = data.choices?.[0]?.message?.content || '';
+    const reasoning = data.choices?.[0]?.message?.reasoning || data.choices?.[0]?.reasoning || '';
+    console.log('[AI Topics] AI 思考过程:', reasoning);
+    console.log('[AI Topics] AI 原始回复:', content);
 
     let topics = parseTopicsFromContent(content, topicCount || 10);
 
@@ -133,23 +152,15 @@ function buildUserPrompt(params: {
   contentDirection?: string;
   decisionStage?: string;
   topicCount?: number;
+  existingTopicTitles?: string[];
 }): string {
-  const { contentTrack, personaStyle, targetAudience, videoTone, videoDuration, accountStage, contentDirection, decisionStage, topicCount } = params;
+  const { topicCount, existingTopicTitles } = params;
 
-  return `请为以下创作者批量策划精准匹配的短视频选题：
+  const duplicationWarning = existingTopicTitles && existingTopicTitles.length > 0
+    ? `\n\n【重要】以下选题标题已生成过，请勿重复：\n${existingTopicTitles.slice(0, 30).join('、')}${existingTopicTitles.length > 30 ? '...' : ''}`
+    : '';
 
-## 创作者身份
-- 内容赛道：${contentTrack}
-- 人设风格：${personaStyle}
-- 目标受众：${targetAudience}
-${videoTone ? `- 视频调性：${videoTone}` : ''}
-${videoDuration ? `- 视频时长：${videoDuration}` : ''}
-
-## 选题需求
-- 账号阶段：${accountStage || '未指定'}
-- 内容方向：${contentDirection || '全部方向'}
-- 用户决策阶段：${decisionStage || '未指定'}
-- 生成数量：${topicCount || 10} 个`;
+  return `请根据上述账号定位和选题需求，生成${topicCount || 10}个精准匹配的短视频选题。直接返回JSON数组，不要包含其他文字说明。${duplicationWarning}`;
 }
 
 function getDefaultPrompt(): string {

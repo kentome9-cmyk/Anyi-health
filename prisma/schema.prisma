@@ -65,6 +65,7 @@ model Store {
   aiAnalyses      AiAnalysis[]
   creatorIdentity CreatorIdentity?
   scriptRecords   ScriptRecord[]
+  topics          Topic[]
 
   @@index([storeUserId])
   @@index([status])
@@ -353,13 +354,42 @@ model CreatorIdentity {
 }
 
 // ============================================
+// 短视频创作 - 选题表
+// ============================================
+model Topic {
+  id              String   @id @default(uuid())
+  storeId         String
+  topic           String   @db.VarChar(255)      // 选题标题
+  summary         String?  @db.Text              // 内容摘要
+  angle           String?  @db.Text              // 切入角度
+  corePoints      String?  @db.Text              // 补充说明/核心观点
+  isRecommended   Boolean  @default(false)        // 是否推荐
+  totalViews      Int      @default(0)           // 总播放量（汇总所有版本的脚本）
+  totalLikes      Int      @default(0)           // 总点赞量
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  // 关联
+  store           Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  scripts         ScriptRecord[]
+
+  @@index([storeId])
+  @@index([topic])
+  @@map("topic")
+}
+
+// ============================================
 // 短视频创作 - 脚本记录表
 // ============================================
 model ScriptRecord {
   id              String   @id @default(uuid())
   storeId         String
+  topicId         String?                        // 关联选题ID
   type            String   @db.VarChar(20)       // original/rewrite
-  topic           String?  @db.VarChar(255)      // 选题标题
+  version         Int      @default(1)            // 版本号
+  topicTitle      String?  @db.VarChar(255)      // 选题标题（冗余，便于展示）
+  summary         String?  @db.Text              // 内容摘要
+  angle           String?  @db.Text              // 切入角度
   corePoints      String?  @db.Text              // 核心观点
   sourceContent   String?  @db.Text              // 原文（改写模式）
   templateName    String?  @db.VarChar(200)     // 使用的模板名称
@@ -368,14 +398,16 @@ model ScriptRecord {
   likeCount       Int      @default(0)            // 点赞量
   commentCount    Int      @default(0)            // 评论量
   favoriteCount   Int      @default(0)            // 收藏量
-  rewriteCount    Int      @default(0)            // 仿写次数
   isRecommended   Boolean  @default(false)        // 是否推荐
+  isFilmed        Boolean  @default(false)        // 是否已拍摄
   createdAt       DateTime @default(now())
 
   // 关联
   store           Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  topic           Topic?   @relation(fields: [topicId], references: [id], onDelete: SetNull)
 
   @@index([storeId])
+  @@index([topicId])
   @@index([type])
   @@index([isRecommended])
   @@map("script_records")

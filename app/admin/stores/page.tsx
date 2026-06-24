@@ -252,7 +252,7 @@ export default function AdminStoresPage() {
               添加门店
             </Button>
           </DialogTrigger>
-          <DialogContent className="!max-w-[500px] !w-[95vw]">
+          <DialogContent className="!max-w-[700px] !w-[95vw]">
             <DialogHeader>
               <DialogTitle>添加新门店</DialogTitle>
             </DialogHeader>
@@ -371,7 +371,7 @@ export default function AdminStoresPage() {
 
         {/* 编辑弹窗 */}
         <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
-          <DialogContent className="!max-w-[500px] !w-[95vw]">
+          <DialogContent className="!max-w-[700px] !w-[95vw]">
             <DialogHeader>
               <DialogTitle>编辑门店</DialogTitle>
             </DialogHeader>

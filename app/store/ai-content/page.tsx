@@ -10,7 +10,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Loader2, Sparkles, Copy, CheckCheck, Play, FileText, Lock, Link, Pencil, Check, Wand2, Library, Search, ChevronRight, Lightbulb } from '@/lib/icons';
+import { Loader2, Sparkles, Copy, CheckCheck, Play, FileText, Lock, Link, Pencil, Check, Wand2, Library, Search, ChevronRight, Lightbulb, Save } from '@/lib/icons';
 import { useAuthStore } from '@/stores/auth.store';
 import NextLink from 'next/link';
 
@@ -45,7 +45,8 @@ interface Template {
 interface ScriptRecord {
   id: string;
   type: 'original' | 'rewrite';
-  topic?: string;
+  topicId?: string;
+  topicTitle?: string;
   summary?: string;
   angle?: string;
   corePoints?: string;
@@ -79,7 +80,7 @@ export default function StoreAIContentPage() {
 
   // 选题库弹窗
   const [showTopicPicker, setShowTopicPicker] = useState(false);
-  const [scriptLibraryTopics, setScriptLibraryTopics] = useState<ScriptRecord[]>([]);
+  const [scriptLibraryTopics, setScriptLibraryTopics] = useState<(Topic & { scripts?: ScriptRecord[] })[]>([]);
   const [loadingTopics, setLoadingTopics] = useState(false);
   const [topicSearchKeyword, setTopicSearchKeyword] = useState('');
 
@@ -89,6 +90,8 @@ export default function StoreAIContentPage() {
   const [rewrittenScript, setRewrittenScript] = useState('');
   const [generatingRewrite, setGeneratingRewrite] = useState(false);
   const [rewriteCopied, setRewriteCopied] = useState(false);
+  const [savingScript, setSavingScript] = useState(false);
+  const [savedScriptId, setSavedScriptId] = useState<string | null>(null);
 
   // 加载创作者身份
   const loadIdentity = async () => {
@@ -119,14 +122,18 @@ export default function StoreAIContentPage() {
 
   // 从 URL 参数获取选题信息（从选题策划页跳转过来）
   const topicFromUrl = useMemo(() => {
+    const topicId = searchParams.get('topicId');
     const topic = searchParams.get('topic');
     const summary = searchParams.get('summary');
     const angle = searchParams.get('angle');
     if (topic) {
-      return { topic, summary: summary || '', angle: angle || '' };
+      return { topicId, topic, summary: summary || '', angle: angle || '' };
     }
     return null;
   }, [searchParams]);
+
+  // 当前选题ID（用于关联脚本）
+  const [currentTopicId, setCurrentTopicId] = useState<string | null>(null);
 
   useEffect(() => {
     loadIdentity();
@@ -140,9 +147,10 @@ export default function StoreAIContentPage() {
       setTopicTitle(topicFromUrl.topic);
       setTopicSummary(topicFromUrl.summary);
       setTopicAngle(topicFromUrl.angle);
+      setCurrentTopicId(topicFromUrl.topicId || null);
       // 设置一个虚拟的 selectedTopic 标记有选题
       setSelectedTopic({
-        id: 'from-url',
+        id: topicFromUrl.topicId || 'from-url',
         title: topicFromUrl.topic,
         summary: topicFromUrl.summary,
         angle: topicFromUrl.angle,
@@ -157,36 +165,33 @@ export default function StoreAIContentPage() {
     setShowTopicPicker(true);
     setLoadingTopics(true);
     try {
-      const res = await fetch(`/api/store/ai-scripts?storeId=${storeId}`);
+      // 调用新的 topics API 获取选题列表
+      const res = await fetch(`/api/store/topics?storeId=${storeId}&includeScripts=true`);
       const data = await res.json();
-      setScriptLibraryTopics(data.scripts || []);
+      setScriptLibraryTopics(data.topics || []);
     } catch (error) {
-      console.error('Failed to load scripts:', error);
+      console.error('Failed to load topics:', error);
     } finally {
       setLoadingTopics(false);
     }
   };
 
   // 从选题库选择选题
-  const handleSelectFromLibrary = (script: ScriptRecord) => {
-    const summaryMatch = script.corePoints?.match(/【内容摘要】([\s\S]*?)(?=【切入角度】|$)/);
-    const angleMatch = script.corePoints?.match(/【切入角度】([\s\S]*?)$/);
-    const supplementaryMatch = script.corePoints?.match(/【补充说明】([\s\S]*?)$/);
-    const summary = summaryMatch?.[1]?.trim() || '';
-    const angle = angleMatch?.[1]?.trim() || '';
-    const supplementary = supplementaryMatch?.[1]?.trim() || '';
-
+  const handleSelectFromLibrary = (topic: Topic & { scripts?: ScriptRecord[] }) => {
+    // 填充选题信息到表单
     setSelectedTopic({
-      id: script.id,
-      title: script.topic || '未命名选题',
-      summary: summary,
-      angle: angle,
+      id: topic.id,
+      title: topic.topic || '未命名选题',
+      summary: topic.summary || '',
+      angle: topic.angle || '',
       selected: true,
     });
-    setTopicTitle(script.topic || '');
-    setTopicSummary(summary);
-    setTopicAngle(angle);
-    setCorePoints(supplementary);
+    setTopicTitle(topic.topic || '');
+    setTopicSummary(topic.summary || '');
+    setTopicAngle(topic.angle || '');
+    setCorePoints(topic.corePoints || '');
+    // 设置选题ID（用于关联新创建的脚本）
+    setCurrentTopicId(topic.id || null);
     setShowTopicPicker(false);
   };
 
@@ -203,12 +208,12 @@ export default function StoreAIContentPage() {
   const renderScriptContent = (content: string) => {
     // 尝试解析JSON
     try {
-      // 去除可能的markdown代码块标记
+      // 去除可能的markdown代码块标记（支持3个或更多反引号）
       let jsonStr = content;
       if (content.includes('```json')) {
-        jsonStr = content.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+        jsonStr = content.replace(/```json\n?/g, '').replace(/```+\n?/g, '').trim();
       } else if (content.includes('```')) {
-        jsonStr = content.replace(/```\n?/g, '').trim();
+        jsonStr = content.replace(/```+\n?/g, '').trim();
       }
       
       const json = JSON.parse(jsonStr);
@@ -223,10 +228,10 @@ export default function StoreAIContentPage() {
             </div>
           )}
           
-          {json.script && (
+          {(json.script || json.rewrittenScript) && (
             <div className="bg-gray-900 text-gray-100 rounded p-3">
               <div className="text-[10px] text-gray-400 mb-1">口播文案</div>
-              <div className="text-xs leading-5 whitespace-pre-wrap">{json.script}</div>
+              <div className="text-xs leading-5 whitespace-pre-wrap">{json.script || json.rewrittenScript}</div>
             </div>
           )}
           
@@ -326,20 +331,6 @@ export default function StoreAIContentPage() {
       const data = await res.json();
       if (data.content) {
         setOriginalScript(data.content);
-        if (storeId) {
-          await fetch('/api/store/ai-scripts', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              storeId,
-              type: 'original',
-              topic: topicTitle || selectedTopic.title,
-              corePoints: `【选题标题】${topicTitle || selectedTopic.title}\n\n【内容摘要】${topicSummary || selectedTopic.summary}\n\n【切入角度】${topicAngle || selectedTopic.angle}\n\n【补充说明】${corePoints || '无'}`,
-              templateName: selectedTemplate.name,
-              content: data.content,
-            }),
-          });
-        }
       }
     } catch (error) {
       console.error('Failed to generate script:', error);
@@ -381,20 +372,6 @@ export default function StoreAIContentPage() {
       const data = await res.json();
       if (data.content) {
         setRewrittenScript(data.content);
-        // 保存到脚本库
-        if (storeId) {
-          await fetch('/api/store/ai-scripts', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              storeId,
-              type: 'rewrite',
-              sourceContent: sourceContent,
-              templateName: rewriteTemplate.name,
-              content: data.content,
-            }),
-          });
-        }
       }
     } catch (error) {
       console.error('Failed to rewrite:', error);
@@ -411,6 +388,45 @@ export default function StoreAIContentPage() {
     } else {
       setRewriteCopied(true);
       setTimeout(() => setRewriteCopied(false), 2000);
+    }
+  };
+
+  // 保存脚本到数据库
+  const handleSaveScript = async (content: string, type: 'original' | 'rewrite') => {
+    if (!storeId) return;
+    
+    setSavingScript(true);
+    try {
+      const res = await fetch('/api/store/ai-scripts', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          storeId,
+          type,
+          topicId: currentTopicId, // 关联选题ID
+          topicTitle: type === 'original' ? (topicTitle || selectedTopic?.title) : null,
+          summary: type === 'original' ? (topicSummary || selectedTopic?.summary) : null,
+          angle: type === 'original' ? (topicAngle || selectedTopic?.angle) : null,
+          corePoints: type === 'original' ? corePoints : null,
+          sourceContent: type === 'rewrite' ? sourceContent : null,
+          templateName: type === 'original' ? selectedTemplate?.name : rewriteTemplate?.name,
+          content,
+        }),
+      });
+      const data = await res.json();
+      if (data.script) {
+        setSavedScriptId(data.script.id);
+        // 如果是新创建的选题，更新 currentTopicId
+        if (data.script.topicId && !currentTopicId) {
+          setCurrentTopicId(data.script.topicId);
+        }
+        setTimeout(() => setSavedScriptId(null), 2000);
+      }
+    } catch (error) {
+      console.error('Failed to save script:', error);
+      alert('保存失败');
+    } finally {
+      setSavingScript(false);
     }
   };
 
@@ -505,7 +521,7 @@ export default function StoreAIContentPage() {
                             </div>
                             <button
                               className="text-[10px] text-gray-400 hover:text-gray-600 shrink-0"
-                              onClick={() => { setSelectedTopic(null); setTopicTitle(''); setTopicSummary(''); setTopicAngle(''); }}
+                              onClick={() => { setSelectedTopic(null); setTopicTitle(''); setTopicSummary(''); setTopicAngle(''); setCurrentTopicId(null); }}
                             >
                               清除
                             </button>
@@ -625,26 +641,30 @@ export default function StoreAIContentPage() {
                 {/* 右侧：脚本输出区 */}
                 <div className="col-span-6 min-h-0 h-full">
                   <Card className="border shadow-sm h-full flex flex-col">
-                    <CardHeader className="border-b bg-gray-50/50 py-1.5 px-3 flex-row items-center justify-between shrink-0">
-                      <CardTitle className="text-xs flex items-center gap-1.5">
-                        <FileText className="h-3 w-3 text-green-600" />
-                        生成区
-                      </CardTitle>
-                      {originalScript && (
-                        <div className="flex items-center gap-1.5">
-                          {selectedTopic && (
+                    <CardHeader className="border-b bg-gray-50/50 py-1.5 px-3 shrink-0">
+                      <div className="flex items-center justify-between w-full">
+                        <div className="flex items-center gap-2">
+                          <CardTitle className="text-xs flex items-center gap-1.5">
+                            <FileText className="h-3 w-3 text-green-600" />
+                            生成区
+                          </CardTitle>
+                          {originalScript && selectedTopic && (
                             <span className="text-[10px] text-gray-500">{selectedTopic.title.slice(0, 12)}...</span>
                           )}
+                        </div>
+                        {originalScript && (
                           <Button
                             variant="outline"
                             size="sm"
-                            onClick={() => handleCopy(originalScript, 'original')}
+                            onClick={() => handleSaveScript(originalScript, 'original')}
+                            disabled={savingScript}
                             className="h-6 text-[11px]"
                           >
-                            {copied ? '已复制' : '复制'}
+                            {savingScript ? <Loader2 className="h-3 w-3 animate-spin" /> : savedScriptId ? <Check className="h-3 w-3" /> : <Save className="h-3 w-3" />}
+                            {savedScriptId ? '已保存' : '保存'}
                           </Button>
-                        </div>
-                      )}
+                        )}
+                      </div>
                     </CardHeader>
                     <CardContent className="flex-1 p-0 min-h-0">
                       {originalScript ? (
@@ -758,26 +778,30 @@ export default function StoreAIContentPage() {
                 {/* 右侧：改写输出区 */}
                 <div className="col-span-6 min-h-0 h-full">
                   <Card className="border shadow-sm h-full flex flex-col">
-                    <CardHeader className="border-b bg-gray-50/50 py-1.5 px-3 flex-row items-center justify-between shrink-0">
-                      <CardTitle className="text-xs flex items-center gap-1.5">
-                        <FileText className="h-3 w-3 text-green-600" />
-                        改写区
-                      </CardTitle>
-                      {rewrittenScript && (
-                        <div className="flex items-center gap-1.5">
-                          {rewriteTemplate && (
+                    <CardHeader className="border-b bg-gray-50/50 py-1.5 px-3 shrink-0">
+                      <div className="flex items-center justify-between w-full">
+                        <div className="flex items-center gap-2">
+                          <CardTitle className="text-xs flex items-center gap-1.5">
+                            <FileText className="h-3 w-3 text-green-600" />
+                            改写区
+                          </CardTitle>
+                          {rewrittenScript && rewriteTemplate && (
                             <span className="text-[10px] text-gray-500">{rewriteTemplate.name}</span>
                           )}
+                        </div>
+                        {rewrittenScript && (
                           <Button
                             variant="outline"
                             size="sm"
-                            onClick={() => handleCopy(rewrittenScript, 'rewrite')}
+                            onClick={() => handleSaveScript(rewrittenScript, 'rewrite')}
+                            disabled={savingScript}
                             className="h-6 text-[11px]"
                           >
-                            {rewriteCopied ? '已复制' : '复制'}
+                            {savingScript ? <Loader2 className="h-3 w-3 animate-spin" /> : savedScriptId ? <Check className="h-3 w-3" /> : <Save className="h-3 w-3" />}
+                            {savedScriptId ? '已保存' : '保存'}
                           </Button>
-                        </div>
-                      )}
+                        )}
+                      </div>
                     </CardHeader>
                     <CardContent className="flex-1 p-0 min-h-0">
                       {rewrittenScript ? (
@@ -838,33 +862,28 @@ export default function StoreAIContentPage() {
                 </div>
               ) : (
                 scriptLibraryTopics
-                  .filter(s => !topicSearchKeyword || (s.topic && s.topic.includes(topicSearchKeyword)))
-                  .map(script => {
-                    // 从 corePoints 中提取选题信息（选题标题、内容摘要、切入角度）
-                    const summaryMatch = script.corePoints?.match(/【内容摘要】([\s\S]*?)(?=【切入角度】|$)/);
-                    const angleMatch = script.corePoints?.match(/【切入角度】([\s\S]*?)(?=【补充说明】|$)/);
-                    const summary = summaryMatch?.[1]?.trim() || '';
-                    const angle = angleMatch?.[1]?.trim() || '';
-                    
-                    const isSelected = selectedTopic?.id === script.id;
+                  .filter((t: any) => !topicSearchKeyword || (t.topic && t.topic.includes(topicSearchKeyword)))
+                  .map((topic: any) => {
+                    // Topic 结构：id, topic, summary, angle, corePoints, scripts[]
+                    const isSelected = selectedTopic?.id === topic.id;
                     return (
                       <div
-                        key={script.id}
+                        key={topic.id}
                         className={`flex border rounded-lg cursor-pointer transition-all overflow-hidden group ${isSelected ? 'border-green-500 bg-green-50/60 ring-1 ring-green-500/30' : 'hover:border-green-300 hover:bg-gray-50/60'}`}
-                        onClick={() => handleSelectFromLibrary(script)}
+                        onClick={() => handleSelectFromLibrary(topic)}
                       >
                         <div className={`w-[4px] bg-green-500 transition-opacity ${isSelected ? 'opacity-100' : 'opacity-0 group-hover:opacity-30'}`} />
                         <div className="w-1/2 p-3 border-r">
                           <div className="text-xs text-gray-500 mb-1">选题</div>
                           <div className="text-sm font-semibold text-gray-900 flex items-center gap-1.5">
                             {isSelected && <Check className="h-3.5 w-3.5 text-green-600" />}
-                            {script.topic || '未命名选题'}
+                            {topic.topic || '未命名选题'}
                           </div>
                         </div>
                         <div className="w-1/2 p-3">
-                          <div className="text-xs text-gray-500 mb-1">选题方向</div>
+                          <div className="text-xs text-gray-500 mb-1">切入角度</div>
                           <div className="text-xs text-gray-700 leading-relaxed">
-                            {angle || summary || '-'}
+                            {topic.angle || topic.summary || '-'}
                           </div>
                         </div>
                       </div>

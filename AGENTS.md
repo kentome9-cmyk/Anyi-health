@@ -1,5 +1,73 @@
 <!-- BEGIN:nextjs-agent-rules -->
-# This is NOT the Next.js you know
+# Project Brief: AnYi Health
 
-This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` before writing any code. Heed deprecation notices.
+## Framework & Dependencies
+- **Next.js**: 15.5.19 (App Router)
+- **React**: 19.2.4
+- **TypeScript**: ^5
+- **Prisma**: ^6.0.0 (ORM)
+- **Tailwind CSS**: 4.3.0 (@tailwindcss/postcss)
+- **shadcn/ui**: ^4.11.0 (UI components)
+- **Zustand**: ^5.0.0 (state management)
+- **Lucide React**: ^0.400.0 (icons)
+
+## Project Structure
+```
+app/
+├── (auth)/           # Authentication routes
+│   └── login/        # Login pages (admin & store)
+├── admin/            # Admin dashboard
+│   ├── ai-qa/        # AI问答管理
+│   ├── ai-scripts/   # AI脚本管理
+│   ├── customers/    # 客户管理
+│   ├── knowledge-base/ # 知识库管理
+│   ├── plan-records/ # 方案记录
+│   ├── prompts/      # 提示词管理
+│   └── stores/       # 门店管理
+├── store/            # Store dashboard
+│   ├── ai-analysis/  # AI分析
+│   ├── ai-content/   # AI内容创作
+│   ├── ai-identity/  # 创作者身份
+│   ├── ai-qa/        # 问答查询
+│   ├── ai-scripts/   # 脚本库
+│   ├── ai-topics/    # 选题策划
+│   ├── ai-topic-library/ # 选题库
+│   ├── customers/    # 客户列表
+│   └── report-submit/ # 报告提交
+└── api/              # API routes
+    ├── admin/        # Admin APIs
+    └── store/        # Store APIs
+```
+
+## Key Path Aliases
+- `@/*` → `./src/*`
+
+## Important Notes
+1. **App Router**: This project uses Next.js 15 with the App Router pattern. Page components are server/client components as defined.
+2. **Authentication**: Uses Zustand store (`src/stores/auth.store.ts`) for auth state. Two roles: `admin` and `store_user`.
+3. **Database**: Prisma ORM with SQLite. Run `npm run db:push` to set up database schema.
+4. **UI Components**: Uses shadcn/ui components from `src/components/ui/`.
+5. **AI Integration**: OpenAI API integration in `src/lib/openai.ts`.
+6. **State Management**: Zustand stores in `src/stores/`.
+
+## Scripts
+- `npm run dev` - Start development server
+- `npm run build` - Build for production
+- `npm run db:generate` - Generate Prisma client
+- `npm run db:push` - Push schema to database
+- `npm run db:migrate` - Run migrations
+- `npm run db:seed` - Seed database with sample data
+
+## Security
+- Passwords are hashed using bcryptjs
+- API routes validate authentication via auth store
+- Never expose API keys or secrets in client-side code
+
+## Best Practices
+1. Use `useAuthStore()` for authentication state
+2. Follow Next.js App Router conventions
+3. Use shadcn/ui components for consistency
+4. Keep API keys in environment variables
+5. Validate all user inputs
+6. Use TypeScript strict mode
 <!-- END:nextjs-agent-rules -->
