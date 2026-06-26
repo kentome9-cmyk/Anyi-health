@@ -42,6 +42,11 @@ app/
 ## Key Path Aliases
 - `@/*` → `./src/*`
 
+## Icon Library
+- Icons are exported from `src/lib/icons.ts` (local re-export of lucide-react)
+- **DO NOT** import icons directly from `lucide-react` - use `@/lib/icons` instead
+- Available icons: LayoutDashboard, Store, Users, User, BookOpen, Settings, FileText, ScrollText, Search, Plus, Eye, EyeOff, Trash2, Copy, Pencil, Edit, Phone, Lock, MessageSquare, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, ChevronDown, Send, Bot, Sparkles, Heart, Leaf, Upload, Download, RefreshCw, FileSpreadsheet, CheckCircle, CheckCheck, Database, Play, Loader2, Save, X, XIcon, Calendar, BrainCircuit, Printer, Star, Check, Target, ClipboardList, CalendarClock, Utensils, Moon, Dumbbell, ArrowLeft, Wand2, Zap, MessageCircle, Briefcase, Library, Menu, Home, MessageCircleQuestion, Clapperboard, LogOut, Lightbulb, Link, Filter, SlidersHorizontal
+
 ## Important Notes
 1. **App Router**: This project uses Next.js 15 with the App Router pattern. Page components are server/client components as defined.
 2. **Authentication**: Uses Zustand store (`src/stores/auth.store.ts`) for auth state. Two roles: `admin` and `store_user`.

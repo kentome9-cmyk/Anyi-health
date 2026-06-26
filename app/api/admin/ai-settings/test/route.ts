@@ -4,12 +4,18 @@ import { prisma } from '@/lib/prisma';
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { apiType } = body; // 'reply' | 'embedding'
+    const { apiType, module = 'default' } = body; // 'reply' | 'embedding'
 
-    const settings = await prisma.aiSettings.findFirst({
-      where: { storeId: null },
-      orderBy: { createdAt: 'desc' },
+    let settings = await prisma.aiSettings.findUnique({
+      where: { module },
     });
+
+    // 如果指定模块没有配置，尝试使用 default
+    if (!settings && module !== 'default') {
+      settings = await prisma.aiSettings.findUnique({
+        where: { module: 'default' },
+      });
+    }
 
     if (!settings) {
       return NextResponse.json({
@@ -53,15 +59,25 @@ export async function POST(request: Request) {
       });
     }
 
-    // 构造测试请求
-    const testUrl = `${baseUrl.replace(/\/$/, '')}/chat/completions`;
-    const testBody = {
-      model: modelId,
-      messages: [
-        { role: 'user', content: '你好，请回复"测试成功"' }
-      ],
-      max_tokens: 50,
-    };
+    let testUrl: string;
+    let testBody: Record<string, any>;
+
+    if (apiType === 'reply') {
+      testUrl = `${baseUrl.replace(/\/$/, '')}/chat/completions`;
+      testBody = {
+        model: modelId,
+        messages: [
+          { role: 'user', content: '你好，请回复"测试成功"' }
+        ],
+        max_tokens: 50,
+      };
+    } else {
+      testUrl = `${baseUrl.replace(/\/$/, '')}/embeddings`;
+      testBody = {
+        model: modelId,
+        input: '测试文本向量化',
+      };
+    }
 
     try {
       const response = await fetch(testUrl, {
@@ -75,10 +91,17 @@ export async function POST(request: Request) {
 
       if (response.ok) {
         const data = await response.json();
-        const reply = data.choices?.[0]?.message?.content || '';
+        let resultMsg = 'API 连接成功！';
+        if (apiType === 'reply') {
+          const reply = data.choices?.[0]?.message?.content || '';
+          resultMsg = reply ? `API 连接成功！回复：${reply}` : 'API 连接成功！';
+        } else {
+          const embeddingLength = data.data?.[0]?.embedding?.length || 0;
+          resultMsg = embeddingLength > 0 ? `API 连接成功！向量维度：${embeddingLength}` : 'API 连接成功！';
+        }
         return NextResponse.json({
           success: true,
-          message: `API 连接成功！${reply ? '回复：' + reply : ''}`,
+          message: resultMsg,
         });
       } else {
         const errorText = await response.text();

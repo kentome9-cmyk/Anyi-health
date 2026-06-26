@@ -270,10 +270,17 @@ export default function StoreCustomersPage() {
     }
   };
 
-  const loadServiceRecords = async (customerId: string) => {
+  const loadServiceRecords = async (customerId: string, planId?: string) => {
     setLoadingRecords(true);
     try {
-      const res = await fetch(`/api/admin/body-records?customerId=${customerId}&storeId=${storeId}`);
+      const params = new URLSearchParams({
+        customerId,
+        storeId: storeId || '',
+      });
+      if (planId) {
+        params.append('planId', planId);
+      }
+      const res = await fetch(`/api/admin/body-records?${params.toString()}`);
       const data = await res.json();
       setServiceRecords(data.list || []);
     } catch (error) {
@@ -293,9 +300,13 @@ export default function StoreCustomersPage() {
         const latest = plans.find((p: CustomerPlan) => p.isLatest) || plans[0];
         setSelectedPlanId(latest.id);
         setNewRecord((prev) => ({ ...prev, planId: latest.id }));
+        // 加载该方案的服务记录
+        await loadServiceRecords(customerId, latest.id);
       } else {
         setSelectedPlanId(null);
         setNewRecord((prev) => ({ ...prev, planId: '' }));
+        // 没有方案时加载所有记录
+        await loadServiceRecords(customerId);
       }
       return;
       if (data.plans && data.plans.length > 0) {
@@ -390,7 +401,7 @@ export default function StoreCustomersPage() {
     setShowDetailModal(true);
     setShowAddRecord(false);
     setShowProjectDropdown(false);
-    await Promise.all([loadServiceRecords(customer.id), loadCustomerPlans(customer.id)]);
+    await loadCustomerPlans(customer.id);
   };
 
   const handleDeleteServiceRecord = async (recordId: string) => {
@@ -399,7 +410,7 @@ export default function StoreCustomersPage() {
       await fetch(`/api/admin/body-records/${recordId}`, {
         method: 'DELETE',
       });
-      await loadServiceRecords(selectedCustomer.id);
+      await loadServiceRecords(selectedCustomer.id, selectedPlanId || undefined);
     } catch (error) {
       console.error('Failed to delete service record:', error);
     }
@@ -447,7 +458,7 @@ export default function StoreCustomersPage() {
         }),
       });
       if (res.ok) {
-        await loadServiceRecords(selectedCustomer.id);
+        await loadServiceRecords(selectedCustomer.id, selectedPlanId || undefined);
         setNewRecord({
           date: new Date().toISOString().split('T')[0],
           project: '',
@@ -838,6 +849,10 @@ export default function StoreCustomersPage() {
                           onValueChange={(value) => {
                             setSelectedPlanId(value);
                             setNewRecord((prev) => ({ ...prev, planId: value }));
+                            // 切换方案后加载该方案的服务记录
+                            if (selectedCustomer) {
+                              loadServiceRecords(selectedCustomer.id, value);
+                            }
                           }}
                         >
                           <SelectTrigger className="w-48">

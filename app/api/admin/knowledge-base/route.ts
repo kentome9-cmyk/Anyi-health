@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import * as XLSX from 'xlsx';
+import { getEmbedding } from '@/lib/openai';
 
 type KnowledgeItem = {
   id: string;
@@ -326,6 +327,21 @@ export async function POST(request: Request) {
       );
     }
 
+    const text = [
+      project,
+      manifestation,
+      pairingEffect,
+      symptom,
+      pairingItem,
+      pairingReason,
+      carePlan,
+      effectEstimation,
+    ]
+      .filter(Boolean)
+      .join(' ');
+
+    const embedding = await getEmbedding(text);
+
     const knowledge = await prisma.knowledgeBase.create({
       data: {
         project,
@@ -336,6 +352,7 @@ export async function POST(request: Request) {
         pairingReason,
         carePlan,
         effectEstimation,
+        embedding: embedding || undefined,
       },
     });
 
@@ -344,6 +361,83 @@ export async function POST(request: Request) {
     console.error('Create knowledge base error:', error);
     return NextResponse.json(
       { error: '创建知识库条目失败' },
+      { status: 500 }
+    );
+  }
+}
+
+export async function PUT(request: Request) {
+  try {
+    const body = await request.json();
+    const action = body.action || '';
+
+    if (action === 'generate-embeddings') {
+      const { ids } = body;
+
+      let items = ids
+        ? await prisma.knowledgeBase.findMany({
+            where: { id: { in: ids } },
+          })
+        : await prisma.knowledgeBase.findMany({});
+
+      if (!ids) {
+        items = items.filter((item) => !item.embedding);
+      }
+
+      if (items.length === 0) {
+        return NextResponse.json({
+          success: true,
+          message: '没有需要生成向量的知识条目',
+          count: 0,
+        });
+      }
+
+      let successCount = 0;
+      let failCount = 0;
+
+      for (const item of items) {
+        const text = [
+          item.project,
+          item.manifestation,
+          item.pairingEffect,
+          item.symptom,
+          item.pairingItem,
+          item.pairingReason,
+          item.carePlan,
+          item.effectEstimation,
+        ]
+          .filter(Boolean)
+          .join(' ');
+
+        const embedding = await getEmbedding(text);
+
+        if (embedding) {
+          await prisma.knowledgeBase.update({
+            where: { id: item.id },
+            data: { embedding },
+          });
+          successCount++;
+        } else {
+          failCount++;
+        }
+      }
+
+      return NextResponse.json({
+        success: true,
+        message: `向量生成完成：成功 ${successCount} 条，失败 ${failCount} 条`,
+        count: successCount,
+        failCount,
+      });
+    }
+
+    return NextResponse.json(
+      { error: '未知操作' },
+      { status: 400 }
+    );
+  } catch (error) {
+    console.error('Generate embeddings error:', error);
+    return NextResponse.json(
+      { error: '生成向量失败' },
       { status: 500 }
     );
   }

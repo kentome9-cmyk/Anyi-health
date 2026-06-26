@@ -10,11 +10,6 @@ export async function POST(request: Request) {
     // 获取模板信息
     const template = await prisma.contentTemplate.findUnique({
       where: { id: templateId },
-      include: {
-        role: {
-          select: { name: true, systemPrompt: true },
-        },
-      },
     });
 
     if (!template) {
@@ -33,7 +28,6 @@ export async function POST(request: Request) {
     if (messages && Array.isArray(messages)) {
       // 构建系统提示词
       const finalSystemPrompt = systemPrompt || [
-        template.role?.systemPrompt || '',
         template.prompt || '',
         template.exampleOutput ? `\n参考示例：\n${template.exampleOutput}` : '',
       ].filter(Boolean).join('\n\n');
@@ -71,7 +65,6 @@ export async function POST(request: Request) {
           id: template.id,
           name: template.name,
         },
-        role: template.role?.name || '',
       });
     }
 
@@ -92,7 +85,6 @@ export async function POST(request: Request) {
       body: JSON.stringify({
         model: config.modelId,
         messages: [
-          ...(template.role?.systemPrompt ? [{ role: 'system', content: template.role.systemPrompt }] : []),
           { role: 'user', content: prompt },
         ],
         temperature: 0.7,
@@ -113,7 +105,6 @@ export async function POST(request: Request) {
         id: template.id,
         name: template.name,
       },
-      role: template.role?.name || '',
     });
   } catch (error) {
     console.error('Generate content error:', error);

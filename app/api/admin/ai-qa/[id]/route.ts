@@ -10,11 +10,6 @@ export async function GET(request: Request, { params }: RouteParams) {
     const { id } = await params;
     const item = await prisma.qaItem.findUnique({
       where: { id },
-      include: {
-        role: {
-          select: { id: true, name: true },
-        },
-      },
     });
 
     if (!item) {
@@ -38,7 +33,7 @@ export async function PUT(request: Request, { params }: RouteParams) {
   try {
     const { id } = await params;
     const body = await request.json();
-    const { question, answer, category, keywords, roleId, isActive } = body;
+    const { question, answer, category, keywords, isActive } = body;
 
     const item = await prisma.qaItem.update({
       where: { id },
@@ -47,7 +42,6 @@ export async function PUT(request: Request, { params }: RouteParams) {
         answer,
         category: category || null,
         keywords: keywords || null,
-        roleId: roleId || null,
         isActive: isActive !== undefined ? isActive : undefined,
       },
     });

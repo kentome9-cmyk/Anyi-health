@@ -6,7 +6,6 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const keyword = searchParams.get('keyword');
     const category = searchParams.get('category');
-    const roleId = searchParams.get('roleId');
 
     const where: any = { isActive: true };
 
@@ -22,18 +21,9 @@ export async function GET(request: Request) {
       where.category = category;
     }
 
-    if (roleId) {
-      where.roleId = roleId;
-    }
-
     const qaItems = await prisma.qaItem.findMany({
       where,
       orderBy: { hitCount: 'desc' },
-      include: {
-        role: {
-          select: { id: true, name: true },
-        },
-      },
     });
 
     // 获取所有分类
@@ -43,17 +33,9 @@ export async function GET(request: Request) {
       _count: true,
     });
 
-    // 获取所有角色
-    const roles = await prisma.aiRole.findMany({
-      where: { isActive: true, category: 'qa' },
-      orderBy: { sortOrder: 'asc' },
-      select: { id: true, name: true },
-    });
-
     return NextResponse.json({
       items: qaItems,
       categories: categories.map(c => ({ name: c.category, count: c._count })),
-      roles,
     });
   } catch (error) {
     console.error('Get store QA items error:', error);

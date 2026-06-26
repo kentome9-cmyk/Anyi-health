@@ -177,16 +177,16 @@ export default function StoreAIContentPage() {
   };
 
   // 从选题库选择选题
-  const handleSelectFromLibrary = (topic: Topic & { scripts?: ScriptRecord[] }) => {
+  const handleSelectFromLibrary = (topic: Topic & { scripts?: ScriptRecord[] } & { topic?: string; corePoints?: string }) => {
     // 填充选题信息到表单
     setSelectedTopic({
       id: topic.id,
-      title: topic.topic || '未命名选题',
+      title: topic.title || topic.topic || '未命名选题',
       summary: topic.summary || '',
       angle: topic.angle || '',
       selected: true,
     });
-    setTopicTitle(topic.topic || '');
+    setTopicTitle(topic.title || topic.topic || '');
     setTopicSummary(topic.summary || '');
     setTopicAngle(topic.angle || '');
     setCorePoints(topic.corePoints || '');

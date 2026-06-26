@@ -18,6 +18,8 @@ import {
   FileText,
   MessageSquare,
   Lightbulb,
+  Heart,
+  Sparkles,
 } from '@/lib/icons';
 
 const navigation = [
@@ -29,18 +31,32 @@ const navigation = [
     children: [
       { name: '客户管理', href: '/admin/customers', icon: Users },
       { name: '对话记录', href: '/admin/plan-records', icon: ScrollText },
+      { name: '知识库', href: '/admin/knowledge-base', icon: BookOpen },
     ],
   },
   {
-    name: 'AI 助手',
+    name: '学习中心',
+    icon: Sparkles,
+    children: [
+      { name: '学习资源管理', href: '/admin/learning-resources', icon: BookOpen },
+    ],
+  },
+  {
+    name: '短视频获客助手',
     icon: Bot,
     children: [
       { name: '脚本库管理', href: '/admin/ai-scripts', icon: FileText },
-      { name: '问答管理', href: '/admin/ai-qa', icon: MessageSquare },
       { name: '提示词管理', href: '/admin/prompts', icon: Lightbulb },
     ],
   },
-  { name: '知识库', href: '/admin/knowledge-base', icon: BookOpen },
+  {
+    name: '月经助手',
+    icon: Heart,
+    children: [
+      { name: '知识库管理', href: '/admin/menstrual-knowledge-base', icon: BookOpen },
+      { name: '问答管理', href: '/admin/ai-qa', icon: MessageSquare },
+    ],
+  },
   { name: 'AI 设置', href: '/admin/ai-settings', icon: Settings },
 ];
 

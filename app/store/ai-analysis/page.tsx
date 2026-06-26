@@ -1,25 +1,9 @@
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
-import dynamic from 'next/dynamic';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Send, Bot, Sparkles, Heart, Leaf, FileText } from '@/lib/icons';
-
-const ReactMarkdown = dynamic(
-  async () => {
-    const ReactMarkdownModule = await import('react-markdown');
-    const remarkGfm = (await import('remark-gfm')).default;
-    return {
-      default: (props: React.ComponentProps<typeof ReactMarkdownModule.default>) => (
-        <ReactMarkdownModule.default remarkPlugins={[remarkGfm]} {...props} />
-      ),
-    };
-  },
-  {
-    ssr: false,
-    loading: () => <div className="text-sm text-gray-400">加载中...</div>,
-  },
-);
+import ReactMarkdown from 'react-markdown';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -584,26 +568,100 @@ function parseAIResponse(content: string): AnalysisResult {
     }
   }
 
-  // 日常建议匹配 - 同时支持 ### ▶ 饮食调理 和 **饮食调理** 格式
-  const dietMatch = cleanedContent.match(/(?:#{2,3}|#{1,6})\s*(?:▶\s*)?饮食调理[:：]?\s*([\s\S]*?)(?=(?:#{2,3}|#{1,6})\s*(?:▶\s*)?作息|(?:#{2,3}|#{1,6})\s*(?:▶\s*)?运动|(?:#{2,3}|#{1,6})\s*(?:▶\s*)?情志|(?:#{2,3}|#{1,6})\s*(?:▶\s*)?注意|(?:#{2,3}|#{1,6})\s*(?:▶\s*)?项目搭配|$)/i)
-    || cleanedContent.match(/\*\*饮食调理\*\*[:：]?\s*([\s\S]*?)(?=\*\*作息|\*\*运动|\*\*情志|\*\*注意|###?\s*项目搭配|$)/i);
-  result.dailyAdvice.diet = dietMatch ? parseSection(`饮食调理：${dietMatch[1]}`, /饮食调理[:：]?\s*([\s\S]*?)$/i) : [];
+  // 日常建议匹配 - 增强版：支持更多格式
+  // 1. ### 饮食调理 / ### ▶ 饮食调理
+  // 2. **饮食调理** / ***饮食调理**
+  // 3. ## 饮食调理
+  // 4. 饮食调理: / 饮食调理：
+  const patterns = [
+    /#{1,6}\s*(?:▶\s*)?([饮食作息运动情志注意][^#\n]{0,10})[:：]?\s*([\s\S]*?)(?=#{1,6}\s*(?:▶\s*)?[饮食作息运动情志注意]|#{1,6}\s*(?:▶\s*)?项目搭配|$)/i,
+    /\*\*([饮食作息运动情志注意][^\*]{0,10})\*\*[:：]?\s*([\s\S]*?)(?=\*\*[饮食作息运动情志注意]|#{1,6}\s*(?:▶\s*)?项目搭配|$)/i,
+    /([饮食作息运动情志注意][^\n]{0,10})[:：]\s*([\s\S]*?)(?=\n[饮食作息运动情志注意][^\n]{0,10}[:：]|\n#{1,6}|项目搭配|$)/i,
+  ];
 
-  const sleepMatch = cleanedContent.match(/(?:#{2,3}|#{1,6})\s*(?:▶\s*)?作息建议[:：]?\s*([\s\S]*?)(?=(?:#{2,3}|#{1,6})\s*(?:▶\s*)?饮食|(?:#{2,3}|#{1,6})\s*(?:▶\s*)?运动|(?:#{2,3}|#{1,6})\s*(?:▶\s*)?情志|(?:#{2,3}|#{1,6})\s*(?:▶\s*)?注意|(?:#{2,3}|#{1,6})\s*(?:▶\s*)?项目搭配|$)/i)
-    || cleanedContent.match(/\*\*作息建议\*\*[:：]?\s*([\s\S]*?)(?=\*\*饮食|\*\*运动|\*\*情志|\*\*注意|###?\s*项目搭配|$)/i);
-  result.dailyAdvice.sleep = sleepMatch ? parseSection(`作息建议：${sleepMatch[1]}`, /作息建议[:：]?\s*([\s\S]*?)$/i) : [];
-
-  const exerciseMatch = cleanedContent.match(/(?:#{2,3}|#{1,6})\s*(?:▶\s*)?运动建议[:：]?\s*([\s\S]*?)(?=(?:#{2,3}|#{1,6})\s*(?:▶\s*)?饮食|(?:#{2,3}|#{1,6})\s*(?:▶\s*)?作息|(?:#{2,3}|#{1,6})\s*(?:▶\s*)?情志|(?:#{2,3}|#{1,6})\s*(?:▶\s*)?注意|(?:#{2,3}|#{1,6})\s*(?:▶\s*)?项目搭配|$)/i)
-    || cleanedContent.match(/\*\*运动建议\*\*[:：]?\s*([\s\S]*?)(?=\*\*饮食|\*\*作息|\*\*情志|\*\*注意|###?\s*项目搭配|$)/i);
-  result.dailyAdvice.exercise = exerciseMatch ? parseExerciseSection(`运动建议：${exerciseMatch[1]}`, /运动建议[:：]?\s*([\s\S]*?)$/i) : [];
-
-  const emotionMatch = cleanedContent.match(/(?:#{2,3}|#{1,6})\s*(?:▶\s*)?情志调节[:：]?\s*([\s\S]*?)(?=(?:#{2,3}|#{1,6})\s*(?:▶\s*)?饮食|(?:#{2,3}|#{1,6})\s*(?:▶\s*)?作息|(?:#{2,3}|#{1,6})\s*(?:▶\s*)?运动|(?:#{2,3}|#{1,6})\s*(?:▶\s*)?注意|(?:#{2,3}|#{1,6})\s*(?:▶\s*)?项目搭配|$)/i)
-    || cleanedContent.match(/\*\*情志调节\*\*[:：]?\s*([\s\S]*?)(?=\*\*饮食|\*\*作息|\*\*运动|\*\*注意|###?\s*项目搭配|$)/i);
-  result.dailyAdvice.emotion = emotionMatch ? parseSection(`情志调节：${emotionMatch[1]}`, /情志调节[:：]?\s*([\s\S]*?)$/i) : [];
-
-  const cautionMatch = cleanedContent.match(/(?:#{2,3}|#{1,6})\s*(?:▶\s*)?注意事项[:：]?\s*([\s\S]*?)(?=(?:#{2,3}|#{1,6})\s*(?:▶\s*)?饮食|(?:#{2,3}|#{1,6})\s*(?:▶\s*)?作息|(?:#{2,3}|#{1,6})\s*(?:▶\s*)?运动|(?:#{2,3}|#{1,6})\s*(?:▶\s*)?情志|(?:#{2,3}|#{1,6})\s*(?:▶\s*)?项目搭配|$)/i)
-    || cleanedContent.match(/\*\*注意事项\*\*[:：]?\s*([\s\S]*?)(?=\*\*饮食|\*\*作息|\*\*运动|\*\*情志|###?\s*项目搭配|$)/i);
-  result.dailyAdvice.caution = cautionMatch ? parseSection(`注意事项：${cautionMatch[1]}`, /注意事项[:：]?\s*([\s\S]*?)$/i) : [];
+  // 尝试从原始内容中提取日常建议（不用 cleanedContent，因为需要保留原始格式）
+  const rawDailyAdvice = content;
+  
+  // 匹配饮食调理
+  const dietPatterns = [
+    /(?:###|##|#)\s*(?:▶\s*)?饮食调理[:：]?\s*([\s\S]*?)(?=(?:###|##|#)\s*(?:▶\s*)?(?:作息|运动|情志|注意)|(?:###|##|#)\s*(?:▶\s*)?项目搭配|$)/i,
+    /\*\*饮食调理\*\*[:：]?\s*([\s\S]*?)(?=\*\*作息|\*\*运动|\*\*情志|\*\*注意|###\s*项目搭配|$)/i,
+    /饮食调理[：:]\s*([\s\S]*?)(?=作息建议|运动建议|情志调节|注意事项|项目搭配)/i,
+  ];
+  
+  for (const p of dietPatterns) {
+    const match = rawDailyAdvice.match(p);
+    if (match && match[1] && match[1].trim().length > 5) {
+      result.dailyAdvice.diet = parseSection(`饮食调理：${match[1]}`, /饮食调理[:：]?\s*([\s\S]*?)$/i);
+      break;
+    }
+  }
+  
+  // 匹配作息建议
+  const sleepPatterns = [
+    /(?:###|##|#)\s*(?:▶\s*)?作息建议[:：]?\s*([\s\S]*?)(?=(?:###|##|#)\s*(?:▶\s*)?(?:饮食|运动|情志|注意)|(?:###|##|#)\s*(?:▶\s*)?项目搭配|$)/i,
+    /\*\*作息建议\*\*[:：]?\s*([\s\S]*?)(?=\*\*饮食|\*\*运动|\*\*情志|\*\*注意|###\s*项目搭配|$)/i,
+    /作息建议[：:]\s*([\s\S]*?)(?=饮食调理|运动建议|情志调节|注意事项|项目搭配)/i,
+  ];
+  
+  for (const p of sleepPatterns) {
+    const match = rawDailyAdvice.match(p);
+    if (match && match[1] && match[1].trim().length > 5) {
+      result.dailyAdvice.sleep = parseSection(`作息建议：${match[1]}`, /作息建议[:：]?\s*([\s\S]*?)$/i);
+      break;
+    }
+  }
+  
+  // 匹配运动建议
+  const exercisePatterns = [
+    /(?:###|##|#)\s*(?:▶\s*)?运动建议[:：]?\s*([\s\S]*?)(?=(?:###|##|#)\s*(?:▶\s*)?(?:饮食|作息|情志|注意)|(?:###|##|#)\s*(?:▶\s*)?项目搭配|$)/i,
+    /\*\*运动建议\*\*[:：]?\s*([\s\S]*?)(?=\*\*饮食|\*\*作息|\*\*情志|\*\*注意|###\s*项目搭配|$)/i,
+    /运动建议[：:]\s*([\s\S]*?)(?=饮食调理|作息建议|情志调节|注意事项|项目搭配)/i,
+  ];
+  
+  for (const p of exercisePatterns) {
+    const match = rawDailyAdvice.match(p);
+    if (match && match[1] && match[1].trim().length > 5) {
+      result.dailyAdvice.exercise = parseExerciseSection(`运动建议：${match[1]}`, /运动建议[:：]?\s*([\s\S]*?)$/i);
+      break;
+    }
+  }
+  
+  // 匹配情志调节
+  const emotionPatterns = [
+    /(?:###|##|#)\s*(?:▶\s*)?情志调节[:：]?\s*([\s\S]*?)(?=(?:###|##|#)\s*(?:▶\s*)?(?:饮食|作息|运动|注意)|(?:###|##|#)\s*(?:▶\s*)?项目搭配|$)/i,
+    /\*\*情志调节\*\*[:：]?\s*([\s\S]*?)(?=\*\*饮食|\*\*作息|\*\*运动|\*\*注意|###\s*项目搭配|$)/i,
+    /情志调节[：:]\s*([\s\S]*?)(?=饮食调理|作息建议|运动建议|注意事项|项目搭配)/i,
+  ];
+  
+  for (const p of emotionPatterns) {
+    const match = rawDailyAdvice.match(p);
+    if (match && match[1] && match[1].trim().length > 5) {
+      result.dailyAdvice.emotion = parseSection(`情志调节：${match[1]}`, /情志调节[:：]?\s*([\s\S]*?)$/i);
+      break;
+    }
+  }
+  
+  // 匹配注意事项
+  const cautionPatterns = [
+    /(?:###|##|#)\s*(?:▶\s*)?注意事项[:：]?\s*([\s\S]*?)(?=(?:###|##|#)\s*(?:▶\s*)?(?:饮食|作息|运动|情志)|(?:###|##|#)\s*(?:▶\s*)?项目搭配|$)/i,
+    /\*\*注意事项\*\*[:：]?\s*([\s\S]*?)(?=\*\*饮食|\*\*作息|\*\*运动|\*\*情志|###\s*项目搭配|$)/i,
+    /注意事项[：:]\s*([\s\S]*?)(?=饮食调理|作息建议|运动建议|情志调节|项目搭配)/i,
+  ];
+  
+  for (const p of cautionPatterns) {
+    const match = rawDailyAdvice.match(p);
+    if (match && match[1] && match[1].trim().length > 5) {
+      result.dailyAdvice.caution = parseSection(`注意事项：${match[1]}`, /注意事项[:：]?\s*([\s\S]*?)$/i);
+      break;
+    }
+  }
+  
+  console.log('[Daily Advice] 饮食:', result.dailyAdvice.diet.length, '条');
+  console.log('[Daily Advice] 作息:', result.dailyAdvice.sleep.length, '条');
+  console.log('[Daily Advice] 运动:', result.dailyAdvice.exercise.length, '条');
+  console.log('[Daily Advice] 情志:', result.dailyAdvice.emotion.length, '条');
+  console.log('[Daily Advice] 注意:', result.dailyAdvice.caution.length, '条');
 
   // 项目搭配推荐匹配 - 同时支持 ## 项目搭配推荐 和 **项目搭配推荐** 格式
   const projectMatch = cleanedContent.match(/(?:#{2,3}|#{1,6})\s*(?:▶\s*)?项目搭配推荐?[:：]?\s*([\s\S]*?)$/i)
@@ -1190,38 +1248,9 @@ export default function AiAnalysisPage() {
                         </div>
                       ) : (
                         // 加载完成后显示完整的 markdown
-                        <div className="markdown-body text-sm text-gray-700">
-                          <ReactMarkdown
-                            components={{
-                              p: ({ children }) => <p className="mb-2 leading-relaxed last:mb-0">{children}</p>,
-                              h1: ({ children }) => <h1 className="text-lg font-bold text-gray-900 mb-2 first:mt-0 mt-3">{children}</h1>,
-                              h2: ({ children }) => <h2 className="text-base font-bold text-gray-900 mb-2 first:mt-0 mt-3">{children}</h2>,
-                              h3: ({ children }) => <h3 className="text-sm font-bold text-gray-900 mb-1 first:mt-0 mt-2">{children}</h3>,
-                              strong: ({ children }) => <strong className="font-bold text-gray-900">{children}</strong>,
-                              em: ({ children }) => <em className="italic">{children}</em>,
-                              ul: ({ children }) => <ul className="list-disc pl-5 mb-2 space-y-1">{children}</ul>,
-                              ol: ({ children }) => <ol className="list-decimal pl-5 mb-2 space-y-1">{children}</ol>,
-                              li: ({ children }) => <li className="text-sm leading-relaxed">{children}</li>,
-                              blockquote: ({ children }) => <blockquote className="border-l-4 border-green-500 pl-3 my-2 text-gray-600 italic">{children}</blockquote>,
-                              code: ({ className, children }) => {
-                                const isInline = !className;
-                                return isInline
-                                  ? <code className="bg-gray-100 text-red-600 px-1 py-0.5 rounded text-xs">{children}</code>
-                                  : <code className="block bg-gray-900 text-green-400 p-3 rounded text-xs overflow-x-auto my-2">{children}</code>;
-                              },
-                              pre: ({ children }) => <pre className="bg-gray-900 rounded p-3 overflow-x-auto my-2">{children}</pre>,
-                              a: ({ href, children }) => <a href={href} className="text-green-600 underline hover:text-green-800" target="_blank" rel="noopener noreferrer">{children}</a>,
-                              table: ({ children }) => <div className="overflow-x-auto my-2"><table className="min-w-full border border-gray-200 text-sm">{children}</table></div>,
-                              thead: ({ children }) => <thead className="bg-gray-50">{children}</thead>,
-                              tbody: ({ children }) => <tbody className="divide-y divide-gray-200">{children}</tbody>,
-                              th: ({ children }) => <th className="px-3 py-2 text-left font-bold text-gray-900 border-b border-gray-200">{children}</th>,
-                              td: ({ children }) => <td className="px-3 py-2 text-gray-700">{children}</td>,
-                              tr: ({ children }) => <tr className="hover:bg-gray-50">{children}</tr>,
-                              hr: () => <hr className="my-3 border-gray-200" />,
-                              br: () => <br />,
-                            }}
-                          >
-                            {message.content}
+                        <div className="text-sm text-gray-700">
+                          <ReactMarkdown>
+                            {message.content.replace(/^```(?:\w+)?\n?/, '').replace(/\n?```$/, '')}
                           </ReactMarkdown>
                         </div>
                       )}

@@ -41,6 +41,7 @@ const PROMPT_TYPES = [
   { value: 'topic', label: '选题策划' },
   { value: 'script', label: '文案创作' },
   { value: 'rewrite', label: '文案改写' },
+  { value: 'menstrual', label: '月经助手' },
 ];
 
 export default function AdminPromptsPage() {

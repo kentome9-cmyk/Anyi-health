@@ -9,7 +9,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Plus, Pencil, Trash2, MessageSquare, Eye, EyeOff, Search } from '@/lib/icons';
+import { Plus, Pencil, Trash2, MessageSquare, Eye, EyeOff, Search, Upload } from '@/lib/icons';
 import { DataTablePagination } from '@/components/ui/data-table-pagination';
 import { useDataTablePagination } from '@/hooks/use-data-table-pagination';
 
@@ -19,62 +19,46 @@ interface QAItem {
   answer: string;
   category: string | null;
   keywords: string[] | null;
-  roleId: string | null;
   isActive: boolean;
   hitCount: number;
   createdAt: string;
-  role?: {
-    id: string;
-    name: string;
-  } | null;
-}
-
-interface AIRole {
-  id: string;
-  name: string;
 }
 
 export default function AdminAIQAPage() {
   const [items, setItems] = useState<QAItem[]>([]);
-  const [roles, setRoles] = useState<AIRole[]>([]);
   const [categories, setCategories] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [showDialog, setShowDialog] = useState(false);
   const [editingItem, setEditingItem] = useState<QAItem | null>(null);
   const [searchKeyword, setSearchKeyword] = useState('');
-  const [filterRole, setFilterRole] = useState<string>('');
   const [filterCategory, setFilterCategory] = useState<string>('');
   const [formData, setFormData] = useState({
     question: '',
     answer: '',
     category: '',
     keywords: '',
-    roleId: '',
     isActive: true,
   });
   const [saving, setSaving] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
   const [viewItem, setViewItem] = useState<QAItem | null>(null);
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const [importResult, setImportResult] = useState<{ success: boolean; message: string } | null>(null);
 
   useEffect(() => {
     loadData();
-  }, [filterRole, filterCategory]);
+  }, [filterCategory]);
 
   const loadData = async () => {
     try {
       const params = new URLSearchParams();
-      if (filterRole && filterRole !== ' ') params.set('roleId', filterRole);
       if (filterCategory && filterCategory !== ' ') params.set('category', filterCategory);
 
-      const [itemsRes, rolesRes] = await Promise.all([
-        fetch(`/api/admin/ai-qa?${params.toString()}`),
-        fetch('/api/admin/ai-roles'),
-      ]);
+      const itemsRes = await fetch(`/api/admin/ai-qa?${params.toString()}`);
       const itemsData = await itemsRes.json();
-      const rolesData = await rolesRes.json();
       setItems(itemsData.list || []);
       setCategories(itemsData.categories || []);
-      setRoles(rolesData.list || []);
     } catch (error) {
       console.error('Failed to load data:', error);
     } finally {
@@ -97,7 +81,6 @@ export default function AdminAIQAPage() {
       answer: '',
       category: '',
       keywords: '',
-      roleId: '',
       isActive: true,
     });
     setShowDialog(true);
@@ -110,7 +93,6 @@ export default function AdminAIQAPage() {
       answer: item.answer,
       category: item.category || '',
       keywords: (item.keywords || []).join(', '),
-      roleId: item.roleId || '',
       isActive: item.isActive,
     });
     setShowDialog(true);
@@ -139,7 +121,6 @@ export default function AdminAIQAPage() {
           keywords: formData.keywords
             ? formData.keywords.split(',').map((k) => k.trim()).filter(Boolean)
             : null,
-          roleId: formData.roleId || null,
           isActive: formData.isActive,
         }),
       });
@@ -156,6 +137,34 @@ export default function AdminAIQAPage() {
       alert('保存失败');
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleFileImport = async (file: File) => {
+    setImporting(true);
+    setImportResult(null);
+
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+
+      const res = await fetch('/api/admin/ai-qa/import', {
+        method: 'POST',
+        body: formData,
+      });
+
+      const data = await res.json();
+      if (res.ok) {
+        setImportResult({ success: true, message: `成功导入 ${data.count} 条数据（共解析 ${data.total} 行）` });
+        await loadData();
+      } else {
+        setImportResult({ success: false, message: data.error || '导入失败' });
+      }
+    } catch (error) {
+      console.error('Failed to import:', error);
+      setImportResult({ success: false, message: '导入失败，请检查文件格式' });
+    } finally {
+      setImporting(false);
     }
   };
 
@@ -204,10 +213,16 @@ export default function AdminAIQAPage() {
           <h2 className="text-2xl font-bold text-gray-900">问答库管理</h2>
           <p className="text-gray-500">管理常见问题与回答，支持 AI 智能问答</p>
         </div>
-        <Button onClick={handleOpenCreate} className="gap-2">
-          <Plus className="h-4 w-4" />
-          新增问答
-        </Button>
+        <div className="flex gap-2">
+          <Button onClick={() => setShowImportModal(true)} variant="outline" className="gap-2">
+            <Upload className="h-4 w-4" />
+            批量导入
+          </Button>
+          <Button onClick={handleOpenCreate} className="gap-2">
+            <Plus className="h-4 w-4" />
+            新增问答
+          </Button>
+        </div>
       </div>
 
       {/* 筛选 */}
@@ -223,19 +238,6 @@ export default function AdminAIQAPage() {
                 className="pl-10"
               />
             </div>
-            <Select value={filterRole} onValueChange={setFilterRole}>
-              <SelectTrigger className="w-40">
-                <SelectValue placeholder="筛选角色" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value=" ">全部角色</SelectItem>
-                {roles.map((role) => (
-                  <SelectItem key={role.id} value={role.id}>
-                    {role.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
             <Select value={filterCategory} onValueChange={setFilterCategory}>
               <SelectTrigger className="w-40">
                 <SelectValue placeholder="筛选分类" />
@@ -261,7 +263,6 @@ export default function AdminAIQAPage() {
                 <TableHead className="text-center">问题</TableHead>
                 <TableHead className="text-center">回答</TableHead>
                 <TableHead className="text-center">分类</TableHead>
-                <TableHead className="text-center">角色</TableHead>
                 <TableHead className="text-center">命中次数</TableHead>
                 <TableHead className="text-center">状态</TableHead>
                 <TableHead className="text-center">操作</TableHead>
@@ -270,13 +271,13 @@ export default function AdminAIQAPage() {
             <TableBody>
               {loading ? (
                 <TableRow>
-                  <TableCell colSpan={7} className="text-center text-gray-500 py-8">
+                  <TableCell colSpan={6} className="text-center text-gray-500 py-8">
                     加载中...
                   </TableCell>
                 </TableRow>
               ) : pagedItems.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={7} className="text-center text-gray-500 py-8">
+                  <TableCell colSpan={6} className="text-center text-gray-500 py-8">
                     暂无问答，点击上方按钮创建
                   </TableCell>
                 </TableRow>
@@ -295,9 +296,6 @@ export default function AdminAIQAPage() {
                       ) : (
                         <span className="text-gray-400">-</span>
                       )}
-                    </TableCell>
-                    <TableCell className="text-center text-gray-600">
-                      {item.role?.name || '-'}
                     </TableCell>
                     <TableCell className="text-center text-gray-600">
                       {item.hitCount}
@@ -405,24 +403,6 @@ export default function AdminAIQAPage() {
                   className="mt-1"
                 />
               </div>
-              <div>
-                <label className="text-sm font-medium text-gray-700">关联角色</label>
-                <Select
-                  value={formData.roleId}
-                  onValueChange={(value) => setFormData((prev) => ({ ...prev, roleId: value }))}
-                >
-                  <SelectTrigger className="mt-1">
-                    <SelectValue placeholder="选择角色（可选）" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {roles.map((role) => (
-                      <SelectItem key={role.id} value={role.id}>
-                        {role.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
             </div>
 
             <div>
@@ -486,11 +466,6 @@ export default function AdminAIQAPage() {
                     <span className="font-medium">分类：</span>{viewItem.category}
                   </span>
                 )}
-                {viewItem.role?.name && (
-                  <span>
-                    <span className="font-medium">角色：</span>{viewItem.role.name}
-                  </span>
-                )}
                 {viewItem.keywords && viewItem.keywords.length > 0 && (
                   <span>
                     <span className="font-medium">关键词：</span>{viewItem.keywords.join(', ')}
@@ -518,6 +493,69 @@ export default function AdminAIQAPage() {
               onClick={() => deleteConfirm && handleDelete(deleteConfirm)}
             >
               删除
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* 批量导入对话框 */}
+      <Dialog open={showImportModal} onOpenChange={setShowImportModal}>
+        <DialogContent className="!max-w-[700px] !w-[95vw]">
+          <DialogHeader>
+            <DialogTitle>批量导入问答</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-sm text-blue-800">
+              <p className="font-medium mb-1">支持文件格式：</p>
+              <p><strong>Excel 文件（.xlsx/.xls）</strong> - 第一行表头，数据从第二行开始</p>
+              <p><strong>CSV 文件（.csv）</strong> - 逗号分隔，UTF-8 编码</p>
+              <p className="mt-1">表头顺序：<strong>问题</strong>、<strong>回答</strong>、分类（可选）、关键词（可选）</p>
+              <p className="mt-1 text-orange-600"><strong>提示：</strong>单次导入建议不超过 200 条数据</p>
+            </div>
+
+            {/* 文件上传 */}
+            <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center hover:border-gray-400 transition-colors">
+              <input
+                type="file"
+                id="file-upload"
+                accept=".csv,.xlsx,.xls"
+                className="hidden"
+                onChange={async (e) => {
+                  const file = e.target.files?.[0];
+                  if (file) {
+                    await handleFileImport(file);
+                  }
+                }}
+              />
+              <label htmlFor="file-upload" className="cursor-pointer">
+                <div className="text-gray-600">
+                  <p className="font-medium">点击选择文件 或 拖拽文件到此处</p>
+                  <p className="text-sm mt-1">支持 .csv, .xlsx, .xls 格式</p>
+                </div>
+              </label>
+            </div>
+
+            {/* 下载模板 */}
+            <div className="flex justify-center">
+              <Button
+                variant="link"
+                onClick={() => window.open('/api/admin/ai-qa/import/template', '_blank')}
+                className="text-blue-600 gap-1"
+              >
+                <Upload className="h-4 w-4" />
+                下载导入模板
+              </Button>
+            </div>
+
+            {importResult && (
+              <div className={`p-3 rounded-lg text-sm ${importResult.success ? 'bg-green-50 text-green-800' : 'bg-red-50 text-red-800'}`}>
+                {importResult.message}
+              </div>
+            )}
+          </div>
+          <DialogFooter className="mt-4">
+            <Button variant="outline" onClick={() => { setShowImportModal(false); setImportResult(null); }}>
+              关闭
             </Button>
           </DialogFooter>
         </DialogContent>

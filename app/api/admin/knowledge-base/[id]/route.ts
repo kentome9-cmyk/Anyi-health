@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { getEmbedding } from '@/lib/openai';
 
 type RouteContext = {
   params: Promise<{ id: string }>;
@@ -50,6 +51,21 @@ export async function PUT(
       effectEstimation,
     } = body;
 
+    const text = [
+      project,
+      manifestation,
+      pairingEffect,
+      symptom,
+      pairingItem,
+      pairingReason,
+      carePlan,
+      effectEstimation,
+    ]
+      .filter(Boolean)
+      .join(' ');
+
+    const embedding = await getEmbedding(text);
+
     const knowledge = await prisma.knowledgeBase.update({
       where: { id },
       data: {
@@ -61,6 +77,7 @@ export async function PUT(
         pairingReason,
         carePlan,
         effectEstimation,
+        embedding: embedding || undefined,
       },
     });
 

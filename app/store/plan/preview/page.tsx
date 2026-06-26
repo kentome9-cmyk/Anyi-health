@@ -392,7 +392,7 @@ export default function PlanPreviewPage() {
   };
 
   return (
-    <div className="flex-1 overflow-y-auto bg-gray-50 print:bg-white print:py-0 print:overflow-visible print:h-auto print:w-full">
+    <div className="flex-1 overflow-y-auto bg-gray-50 print:bg-white print:py-0 print:overflow-hidden print:h-auto print:w-full print:flex-none">
       {/* 打印专用样式
           - @page margin: 15mm → 每页（包括跨页后的新页）都有均匀的 15mm 边距
           - .a4-paper 打印时取消额外 padding，避免和 @page margin 重复
@@ -413,12 +413,21 @@ export default function PlanPreviewPage() {
             background: white;
             -webkit-print-color-adjust: exact;
             print-color-adjust: exact;
+            overflow: hidden !important;
+            width: 100% !important;
+            height: auto !important;
+          }
+          body > * {
+            overflow: hidden !important;
           }
           * {
             -webkit-print-color-adjust: exact;
             print-color-adjust: exact;
+            overflow: visible !important;
           }
-          /* A4 纸张容器：取消固定宽度和 padding，让 @page margin 控制边距 */
+          ::-webkit-scrollbar {
+            display: none !important;
+          }
           .a4-paper {
             width: 100% !important;
             max-width: 100% !important;
@@ -427,8 +436,8 @@ export default function PlanPreviewPage() {
             margin: 0 !important;
             box-shadow: none !important;
             box-sizing: border-box;
+            overflow: visible !important;
           }
-          /* 内部板块之间的少量间距 */
           .a4-paper > * + * {
             margin-top: 3mm;
           }

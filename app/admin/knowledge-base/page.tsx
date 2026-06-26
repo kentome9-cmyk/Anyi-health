@@ -39,6 +39,8 @@ import {
   Download,
   RefreshCw,
   FileSpreadsheet,
+  Sparkles,
+  CheckCircle,
 } from '@/lib/icons';
 import { DataTablePagination } from '@/components/ui/data-table-pagination';
 import { useDataTablePagination } from '@/hooks/use-data-table-pagination';
@@ -53,6 +55,7 @@ interface KnowledgeItem {
   pairingReason: string | null;
   carePlan: string | null;
   effectEstimation: string | null;
+  embedding: number[] | null;
   createdAt: string;
 }
 
@@ -106,6 +109,9 @@ export default function AdminKnowledgeBasePage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [toast, setToast] = useState<{ type: 'success' | 'error'; msg: string } | null>(null);
+  
+  const [generatingEmbedding, setGeneratingEmbedding] = useState(false);
+  const [embeddingProgress, setEmbeddingProgress] = useState<{ total: number; done: number } | null>(null);
 
   useEffect(() => {
     loadKnowledge();
@@ -343,6 +349,34 @@ export default function AdminKnowledgeBasePage() {
     }
   };
 
+  const handleGenerateEmbeddings = async () => {
+    try {
+      setGeneratingEmbedding(true);
+      setEmbeddingProgress(null);
+
+      const res = await fetch('/api/admin/knowledge-base', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'generate-embeddings' }),
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        showToast('success', data.message || '向量生成完成');
+        loadKnowledge();
+      } else {
+        const err = await res.json().catch(() => ({}));
+        showToast('error', err.error || '生成向量失败');
+      }
+    } catch (e) {
+      console.error(e);
+      showToast('error', '生成向量失败');
+    } finally {
+      setGeneratingEmbedding(false);
+      setEmbeddingProgress(null);
+    }
+  };
+
   const filteredKnowledge = useMemo(() => {
     if (!searchKeyword.trim()) return knowledge;
     const kw = searchKeyword.trim().toLowerCase();
@@ -433,6 +467,14 @@ export default function AdminKnowledgeBasePage() {
           批量导出
         </Button>
         <Button
+          variant="outline"
+          onClick={handleGenerateEmbeddings}
+          disabled={generatingEmbedding}
+        >
+          <Sparkles className="h-4 w-4 mr-1.5" />
+          {generatingEmbedding ? '生成中...' : '生成向量'}
+        </Button>
+        <Button
           variant="destructive"
           onClick={() => setBatchDeleteOpen(true)}
           disabled={selectedIds.length === 0}
@@ -454,7 +496,7 @@ export default function AdminKnowledgeBasePage() {
           <Table>
             <TableHeader className="bg-gray-50">
               <TableRow>
-                <TableHead className="w-12">
+                <TableHead className="w-10">
                   <Checkbox
                     checked={
                       knowledge.length > 0 &&
@@ -464,27 +506,24 @@ export default function AdminKnowledgeBasePage() {
                     aria-label="全选"
                   />
                 </TableHead>
-                <TableHead className="font-semibold text-gray-700 min-w-[120px]">项目</TableHead>
-                <TableHead className="font-semibold text-gray-700 min-w-[160px]">表现</TableHead>
-                <TableHead className="font-semibold text-gray-700 min-w-[160px]">搭配效果</TableHead>
-                <TableHead className="font-semibold text-gray-700 min-w-[140px]">症状</TableHead>
-                <TableHead className="font-semibold text-gray-700 min-w-[110px]">搭配项目</TableHead>
-                <TableHead className="font-semibold text-gray-700 min-w-[160px]">搭配原因</TableHead>
-                <TableHead className="font-semibold text-gray-700 min-w-[160px]">调理规划</TableHead>
-                <TableHead className="font-semibold text-gray-700 min-w-[140px]">效果预估</TableHead>
-                <TableHead className="font-semibold text-gray-700 w-24 text-right">操作</TableHead>
+                <TableHead className="font-semibold text-gray-700 w-[15%]">项目</TableHead>
+                <TableHead className="font-semibold text-gray-700 w-[25%]">表现</TableHead>
+                <TableHead className="font-semibold text-gray-700 w-[20%]">搭配效果</TableHead>
+                <TableHead className="font-semibold text-gray-700 w-[12%]">搭配项目</TableHead>
+                <TableHead className="font-semibold text-gray-700 w-[10%] text-center">向量</TableHead>
+                <TableHead className="font-semibold text-gray-700 w-[8%] text-right">操作</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {loading ? (
                 <TableRow>
-                  <TableCell colSpan={10} className="h-24 text-center text-gray-500">
+                  <TableCell colSpan={7} className="h-24 text-center text-gray-500">
                     加载中...
                   </TableCell>
                 </TableRow>
               ) : pagedKnowledge.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={10} className="h-24 text-center text-gray-500">
+                  <TableCell colSpan={7} className="h-24 text-center text-gray-500">
                     {searchKeyword ? '未找到匹配的知识条目' : '暂无数据，点击右上角"添加知识"开始创建'}
                   </TableCell>
                 </TableRow>
@@ -499,62 +538,40 @@ export default function AdminKnowledgeBasePage() {
                       />
                     </TableCell>
                     <TableCell>
-                      <div className="font-medium text-gray-900" title={kb.project}>
+                      <div className="font-medium text-gray-900 truncate" title={kb.project}>
                         {kb.project || '-'}
                       </div>
                     </TableCell>
                     <TableCell>
                       <div
-                        className="text-sm text-gray-700 leading-relaxed"
+                        className="text-sm text-gray-700 truncate"
                         title={kb.manifestation || ''}
                       >
-                        {truncate(kb.manifestation, 60)}
+                        {truncate(kb.manifestation, 30)}
                       </div>
                     </TableCell>
                     <TableCell>
                       <div
-                        className="text-sm text-gray-700 leading-relaxed"
+                        className="text-sm text-gray-700 truncate"
                         title={kb.pairingEffect || ''}
                       >
-                        {truncate(kb.pairingEffect, 60)}
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <div className="text-sm text-gray-700 leading-relaxed" title={kb.symptom || ''}>
-                        {truncate(kb.symptom, 50)}
+                        {truncate(kb.pairingEffect, 30)}
                       </div>
                     </TableCell>
                     <TableCell>
                       <div
-                        className="inline-flex max-w-full px-2 py-1 text-xs rounded bg-gray-100 text-gray-700"
+                        className="text-xs px-1.5 py-0.5 rounded bg-gray-100 text-gray-700 truncate"
                         title={kb.pairingItem || ''}
                       >
-                        {truncate(kb.pairingItem, 20)}
+                        {kb.pairingItem || '-'}
                       </div>
                     </TableCell>
-                    <TableCell>
-                      <div
-                        className="text-sm text-gray-700 leading-relaxed"
-                        title={kb.pairingReason || ''}
-                      >
-                        {truncate(kb.pairingReason, 60)}
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <div
-                        className="text-sm text-gray-700 leading-relaxed"
-                        title={kb.carePlan || ''}
-                      >
-                        {truncate(kb.carePlan, 60)}
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <div
-                        className="text-sm text-gray-700 leading-relaxed"
-                        title={kb.effectEstimation || ''}
-                      >
-                        {truncate(kb.effectEstimation, 50)}
-                      </div>
+                    <TableCell className="text-center">
+                      {kb.embedding ? (
+                        <span title="已生成向量"><CheckCircle className="h-3.5 w-3.5 text-green-600 mx-auto" /></span>
+                      ) : (
+                        <span className="text-gray-300" title="未生成向量">—</span>
+                      )}
                     </TableCell>
                     <TableCell>
                       <div className="flex justify-end gap-1">
@@ -564,7 +581,7 @@ export default function AdminKnowledgeBasePage() {
                           onClick={() => openEditDialog(kb)}
                           title="编辑"
                         >
-                          <Pencil className="h-4 w-4" />
+                          <Pencil className="h-3.5 w-3.5" />
                         </Button>
                         <Button
                           variant="ghost"
@@ -573,7 +590,7 @@ export default function AdminKnowledgeBasePage() {
                           title="删除"
                           className="text-red-600 hover:text-red-700 hover:bg-red-50"
                         >
-                          <Trash2 className="h-4 w-4" />
+                          <Trash2 className="h-3.5 w-3.5" />
                         </Button>
                       </div>
                     </TableCell>

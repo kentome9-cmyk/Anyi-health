@@ -6,19 +6,27 @@ import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { useAuthStore } from '@/stores/auth.store';
 import { SidebarNav } from '@/components/ui/sidebar-nav';
-import { LayoutDashboard, Users, ClipboardList, Sparkles, BookOpen, Briefcase, User, Wand2, Library, LogOut, Home, MessageCircleQuestion, Clapperboard, Lightbulb } from '@/lib/icons';
+import { LayoutDashboard, Users, ClipboardList, Sparkles, BookOpen, Briefcase, User, Wand2, Library, LogOut, Home, MessageCircleQuestion, Clapperboard, Lightbulb, Heart } from '@/lib/icons';
 
 const sidebarNav = [
   { name: '首页', href: '/store', icon: LayoutDashboard },
+  { name: '学习中心', href: '/store/learning-center', icon: BookOpen },
   {
-    name: '方案搭配',
+    name: '项目搭配',
     icon: Briefcase,
     children: [
       { name: '客户管理', href: '/store/customers', icon: Users },
       { name: '在线分析', href: '/store/report-submit', icon: ClipboardList },
     ],
   },
-  { name: '问答查询', href: '/store/ai-qa', icon: BookOpen },
+  {
+    name: '月经助手',
+    icon: Heart,
+    children: [
+      { name: '安姨聊天', href: '/store/menstrual-chat', icon: MessageCircleQuestion },
+      { name: '问答查询', href: '/store/ai-qa', icon: BookOpen },
+    ],
+  },
   {
     name: '短视频助手',
     icon: Sparkles,
@@ -137,7 +145,7 @@ export default function StoreLayout({
 
       {/* 移动端：顶部栏 + 主内容 + 底部 TabBar */}
       <main
-        className={`flex-1 overflow-hidden flex flex-col print:overflow-visible print:w-full print:min-h-screen print:p-0 print:m-0 ${isMobile ? 'bg-gray-50' : ''}`}
+        className={`flex-1 overflow-hidden flex flex-col min-h-0 print:overflow-visible print:w-full print:min-h-screen print:p-0 print:m-0 ${isMobile ? 'bg-gray-50' : ''}`}
       >
         {/* 移动端顶部栏 */}
         {isMobile && (
@@ -160,7 +168,7 @@ export default function StoreLayout({
         )}
 
         {/* 页面内容（移动端留出底部 TabBar 空间） */}
-        <div className={`flex-1 ${isFullScreenPage ? 'overflow-hidden' : 'overflow-auto'} ${isMobile ? 'pb-20' : ''}`}>
+        <div className={`flex-1 flex flex-col min-h-0 ${isMobile ? 'pb-20' : ''}`}>
           {children}
         </div>
 

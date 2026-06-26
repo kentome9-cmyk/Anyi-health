@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getPromptByType } from '@/lib/prompt';
+import { searchKnowledgeByEmbedding, formatKnowledgeContext } from '@/lib/openai';
 
 const DEFAULT_SYSTEM_PROMPT =
   '你是一名产后康复健康管理顾问。请严格根据用户输入和后台配置的提示词回答，不要额外增加未被要求的固定章节或项目推荐。';
@@ -118,11 +119,17 @@ async function createStreamResponse({
   });
 }
 
-function buildProviderMessages(systemPrompt: string | null | undefined, messages: ChatMessage[]) {
+function buildProviderMessages(systemPrompt: string | null | undefined, messages: ChatMessage[], knowledgeContext?: string) {
+  let systemContent = systemPrompt?.trim() || DEFAULT_SYSTEM_PROMPT;
+  
+  if (knowledgeContext) {
+    systemContent = `${systemContent}\n\n${knowledgeContext}`;
+  }
+
   return [
     {
       role: 'system',
-      content: systemPrompt?.trim() || DEFAULT_SYSTEM_PROMPT,
+      content: systemContent,
     },
     ...messages.map((message) => ({
       role: message.role === 'ai' ? 'assistant' : message.role,
@@ -135,6 +142,23 @@ async function getAnalysisPrompt(type: string = 'plan'): Promise<string> {
   const prompt = await getPromptByType(type);
   console.log(`[AI-Chat] 获取到的 ${type} 提示词:`, prompt ? `${prompt.substring(0, 100)}...` : 'null/empty');
   return prompt || DEFAULT_SYSTEM_PROMPT;
+}
+
+async function getKnowledgeContext(userMessage: string): Promise<string> {
+  try {
+    const matches = await searchKnowledgeByEmbedding(userMessage, 'default', 5, 0.5);
+    
+    if (matches.length > 0) {
+      console.log(`[AI-Chat] 向量检索找到 ${matches.length} 条相关知识`);
+      return formatKnowledgeContext(matches);
+    }
+    
+    console.log('[AI-Chat] 向量检索未找到匹配知识');
+    return '';
+  } catch (error) {
+    console.error('[AI-Chat] 向量检索失败:', error);
+    return '';
+  }
 }
 
 async function* streamAIReply(messages: ChatMessage[], type: string = 'plan'): AsyncGenerator<string> {
@@ -150,9 +174,15 @@ async function* streamAIReply(messages: ChatMessage[], type: string = 'plan'): A
   try {
     const apiUrl = `${settings.baseUrl.replace(/\/$/, '')}/chat/completions`;
     const systemPrompt = await getAnalysisPrompt(type);
+    
+    // 获取用户最新的消息进行向量检索
+    const userMessage = messages[messages.length - 1]?.content || '';
+    const knowledgeContext = await getKnowledgeContext(userMessage);
+    
     console.log(`[AI-Chat] 发送 ${messages.length} 条历史消息 + 1 条 system prompt`);
-    const finalMessages = buildProviderMessages(systemPrompt, messages);
+    const finalMessages = buildProviderMessages(systemPrompt, messages, knowledgeContext);
     console.log(`[AI-Chat] 最终发送 ${finalMessages.length} 条消息 (含 system)`);
+    console.log(`[AI-Chat] 知识上下文长度: ${knowledgeContext.length} 字符`);
     const response = await fetch(apiUrl, {
       method: 'POST',
       headers: {
@@ -228,9 +258,16 @@ async function generateAIReply(messages: ChatMessage[], type: string = 'plan'): 
   try {
     const apiUrl = `${settings.baseUrl.replace(/\/$/, '')}/chat/completions`;
     const systemPrompt = await getAnalysisPrompt(type);
+    
+    // 获取用户最新的消息进行向量检索
+    const userMessage = messages[messages.length - 1]?.content || '';
+    const knowledgeContext = await getKnowledgeContext(userMessage);
+    
     console.log(`[AI-Chat] 发送 ${messages.length} 条历史消息 + 1 条 system prompt`);
-    const finalMessages = buildProviderMessages(systemPrompt, messages);
+    const finalMessages = buildProviderMessages(systemPrompt, messages, knowledgeContext);
     console.log(`[AI-Chat] 最终发送 ${finalMessages.length} 条消息 (含 system)`);
+    console.log(`[AI-Chat] 知识上下文长度: ${knowledgeContext.length} 字符`);
+    
     const response = await fetch(apiUrl, {
       method: 'POST',
       headers: {

@@ -57,15 +57,16 @@ model Store {
   updatedAt      DateTime  @updatedAt
 
   // 关联
-  storeUser      StoreUser    @relation(fields: [storeUserId], references: [id], onDelete: Cascade)
-  customers       Customer[]
-  plans           Plan[]
-  reports         Report[]
-  bodyRecords     BodyRecord[]
-  aiAnalyses      AiAnalysis[]
-  creatorIdentity CreatorIdentity?
-  scriptRecords   ScriptRecord[]
-  topics          Topic[]
+  storeUser             StoreUser    @relation(fields: [storeUserId], references: [id], onDelete: Cascade)
+  customers             Customer[]
+  plans                 Plan[]
+  reports               Report[]
+  bodyRecords           BodyRecord[]
+  aiAnalyses            AiAnalysis[]
+  creatorIdentity       CreatorIdentity?
+  scriptRecords         ScriptRecord[]
+  topics                Topic[]
+  menstrualChatSessions MenstrualChatSession[]
 
   @@index([storeUserId])
   @@index([status])
@@ -187,7 +188,7 @@ model BodyRecord {
 // AI 设置表
 model AiSettings {
   id           String   @id @default(uuid())
-  storeId      String?  // 门店ID，null表示全局设置
+  module       String   @unique @default("default")  // 模块标识：default, qa, content, analysis
   
   // 答复 API（用于对话/分析）
   apiKey       String?  @db.Text
@@ -241,27 +242,7 @@ model AiAnalysis {
   @@map("ai_analysis")
 }
 
-// ============================================
-// AI 角色模板表
-// ============================================
 
-model AiRole {
-  id          String   @id @default(uuid())
-  name        String   @db.VarChar(100)     // 角色名称
-  category    String?  @db.VarChar(50)      // 分类，如 "qa"、"content"
-  description String?  @db.Text             // 角色描述
-  systemPrompt String? @db.Text             // 系统提示词/人设
-  isActive    Boolean  @default(true)       // 是否启用
-  sortOrder   Int      @default(0)          // 排序
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-
-  // 关联
-  contentTemplates ContentTemplate[]
-  qaItems          QaItem[]
-
-  @@map("ai_role")
-}
 
 // ============================================
 // 内容生成模板表
@@ -275,14 +256,10 @@ model ContentTemplate {
   variables     String?  @db.Text              // 变量说明（JSON格式）
   outputFormat  String   @default("text") @db.VarChar(50) // 输出格式
   exampleOutput String?  @db.Text              // 示例输出
-  roleId        String?                        // 关联角色ID
   usageCount    Int      @default(0)           // 使用次数
   isActive      Boolean  @default(true)        // 是否启用
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
-
-  // 关联
-  role AiRole? @relation(fields: [roleId], references: [id], onDelete: SetNull)
 
   @@map("content_template")
 }
@@ -297,18 +274,16 @@ model QaItem {
   answer    String   @db.Text              // 回答
   category  String?  @db.VarChar(100)      // 分类
   keywords  String?  @db.Text              // 关键词
-  roleId    String?                        // 关联角色ID
   hitCount  Int      @default(0)           // 命中次数
   isActive  Boolean  @default(true)        // 是否启用
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  // 关联
-  role AiRole? @relation(fields: [roleId], references: [id], onDelete: SetNull)
-
   @@index([category])
   @@map("qa_item")
 }
+
+
 
 // ============================================
 // 知识库表
@@ -325,10 +300,100 @@ model KnowledgeBase {
   pairingReason   String   @db.Text              // 搭配原因
   carePlan        String   @db.Text             // 调理规划
   effectEstimation String  @db.Text             // 效果预估
+  embedding       Json?                          // 文本向量（Embedding）
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
   @@map("knowledge_base")
+}
+
+// 月经助手知识库
+model MenstrualKnowledgeBase {
+  id              String   @id @default(uuid())
+  category        String   @db.VarChar(100)      // 分类：月经问题、排卵期调理、痛经、周期异常等
+  symptom         String   @db.Text              // 症状表现
+  cause           String   @db.Text              // 原因分析
+  suggestion      String   @db.Text              // 建议方案
+  dietAdvice      String   @db.Text              // 饮食建议
+  lifestyleAdvice String   @db.Text             // 生活建议
+  attention       String   @db.Text              // 注意事项
+  embedding       Json?                          // 文本向量（Embedding）
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@map("menstrual_knowledge_base")
+}
+
+// 产品库表
+model Product {
+  id             String   @id @default(uuid())
+  category       String   @db.VarChar(100)      // 产品分类：私护产品、足浴泡脚、膏方食养、茶饮等
+  name           String   @db.VarChar(255)      // 产品名称
+  spec           String?  @db.VarChar(100)      // 规格
+  price          String?  @db.VarChar(50)       // 价格
+  ingredients    String?  @db.Text              // 主要成分
+  effects        String?  @db.Text              // 产品功效
+  targetAudience String?  @db.Text              // 适用人群
+  usage          String?  @db.Text              // 使用方式
+  embedding      Json?                          // 文本向量（Embedding）
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([category])
+  @@map("product")
+}
+
+// 调理方案库表（产品搭配）
+model HealthPlan {
+  id             String   @id @default(uuid())
+  type           String   @db.VarChar(100)      // 调理类型：补气血、调理睡眠、痛经调理等
+  targetAudience String?  @db.Text              // 适用人群
+  productCombo   String?  @db.Text              // 推荐产品组合
+  usage          String?  @db.Text              // 使用方式
+  embedding      Json?                          // 文本向量（Embedding）
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([type])
+  @@map("health_plan")
+}
+
+// ============================================
+// 月经助手 - 聊天会话表
+// ============================================
+model MenstrualChatSession {
+  id             String   @id @default(uuid())
+  storeId        String
+  title          String   @db.VarChar(255)      // 会话标题（取第一条消息或用户输入）
+  messageCount   Int      @default(0)           // 消息数量
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  // 关联
+  store          Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  messages       MenstrualChatMessage[]
+
+  @@index([storeId])
+  @@index([updatedAt])
+  @@map("menstrual_chat_session")
+}
+
+// ============================================
+// 月经助手 - 聊天消息表
+// ============================================
+model MenstrualChatMessage {
+  id             String   @id @default(uuid())
+  sessionId      String
+  role           String   @db.VarChar(20)       // user/assistant
+  content        String   @db.Text              // 消息内容
+  createdAt      DateTime @default(now())
+
+  // 关联
+  session        MenstrualChatSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId])
+  @@index([createdAt])
+  @@map("menstrual_chat_message")
 }
 
 
@@ -411,4 +476,28 @@ model ScriptRecord {
   @@index([type])
   @@index([isRecommended])
   @@map("script_records")
+}
+
+// ============================================
+// 学习中心 - 学习资源表
+// ============================================
+model LearningResource {
+  id          String   @id @default(uuid())
+  title       String   @db.VarChar(255)     // 资源标题
+  type        String   @db.VarChar(20)      // 资源类型：md/ppt
+  category    String   @db.VarChar(100)     // 分类：培训课程、产品知识、营销技巧等
+  description String?  @db.Text             // 描述说明
+  content     String?  @db.Text             // MD文档内容（type=md时使用）
+  filePath    String?  @db.VarChar(500)     // 文件路径（type=ppt时使用，存储PDF或图片路径）
+  pageCount   Int?     @default(0)          // PPT页数
+  fileSize    String?  @db.VarChar(50)      // 文件大小
+  isActive    Boolean  @default(true)       // 是否启用
+  sortOrder   Int      @default(0)          // 排序
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([type])
+  @@index([category])
+  @@index([isActive])
+  @@map("learning_resource")
 }

@@ -1,22 +1,25 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
-    const settings = await prisma.aiSettings.findFirst({
-      orderBy: { createdAt: 'desc' },
+    const { searchParams } = new URL(request.url);
+    const module = searchParams.get('module');
+
+    if (module) {
+      // 查询指定模块
+      const settings = await prisma.aiSettings.findUnique({
+        where: { module },
+      });
+      return NextResponse.json(settings || null);
+    }
+
+    // 查询所有模块配置
+    const allSettings = await prisma.aiSettings.findMany({
+      orderBy: { module: 'asc' },
     });
 
-    return NextResponse.json(settings || {
-      apiKey: '',
-      agentId: '',
-      datasetId: '',
-      baseUrl: '',
-      modelId: '',
-      embeddingApiKey: '',
-      embeddingBaseUrl: '',
-      embeddingModelId: '',
-    });
+    return NextResponse.json(allSettings);
   } catch (error) {
     console.error('Get ai settings error:', error);
     return NextResponse.json(
@@ -30,18 +33,21 @@ export async function PUT(request: Request) {
   try {
     const body = await request.json();
     const { 
+      module,
       apiKey, agentId, datasetId, baseUrl, modelId, 
       embeddingApiKey, embeddingBaseUrl, embeddingModelId
     } = body;
 
-    const existing = await prisma.aiSettings.findFirst({
-      orderBy: { createdAt: 'desc' },
-    });
+    const moduleId = module || 'default';
 
     let settings;
+    const existing = await prisma.aiSettings.findUnique({
+      where: { module: moduleId },
+    });
+
     if (existing) {
       settings = await prisma.aiSettings.update({
-        where: { id: existing.id },
+        where: { module: moduleId },
         data: {
           apiKey,
           agentId,
@@ -56,6 +62,7 @@ export async function PUT(request: Request) {
     } else {
       settings = await prisma.aiSettings.create({
         data: {
+          module: moduleId,
           apiKey,
           agentId,
           datasetId,

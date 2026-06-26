@@ -1,24 +1,17 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { getOpenAIConfig } from '@/lib/openai';
 
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { query, storeId } = body;
+    const { query } = body;
 
     if (!query || query.trim().length === 0) {
       return NextResponse.json({ error: '请输入问题' }, { status: 400 });
     }
 
-    // 获取所有启用的问答数据
     const qaItems = await prisma.qaItem.findMany({
       where: { isActive: true },
-      include: {
-        role: {
-          select: { name: true, systemPrompt: true },
-        },
-      },
     });
 
     if (qaItems.length === 0) {
@@ -28,86 +21,82 @@ export async function POST(request: Request) {
       });
     }
 
-    // 获取 AI 配置
-    const config = await getOpenAIConfig();
-    if (!config) {
-      return NextResponse.json({ error: 'AI 未配置' }, { status: 500 });
-    }
+    const normalizedQuery = query.trim().toLowerCase();
+    const queryWords: string[] = normalizedQuery.replace(/[？?。，！]/g, '').split(/\s+/);
 
-    // 构建知识库上下文
-    const knowledgeContext = qaItems
-      .map(item => `Q: ${item.question}\nA: ${item.answer}`)
-      .join('\n\n');
+    const scored = qaItems.map(item => {
+      let score = 0;
+      const questionLower = item.question.toLowerCase();
+      const keywordsLower = (item.keywords || '').toLowerCase();
+      const categoryLower = (item.category || '').toLowerCase();
+      const answerLower = item.answer.toLowerCase();
 
-    // 调用 AI 进行匹配
-    const apiUrl = `${config.baseUrl.replace(/\/$/, '')}/chat/completions`;
-    const messages: { role: 'system' | 'user'; content: string }[] = [];
+      if (questionLower.includes(normalizedQuery)) {
+        score += 100;
+      }
 
-    // 系统提示词
-    messages.push({
-      role: 'system',
-      content: `你是一个专业的问答助手。根据提供的知识库内容，回答用户的问题。
+      const questionWords = questionLower.replace(/[？?。，！]/g, '').split(/\s+/);
+      queryWords.forEach(word => {
+        if (questionWords.some(qw => qw.includes(word) || word.includes(qw))) {
+          score += 20;
+        }
+      });
 
-知识库：
-${knowledgeContext}
+      queryWords.forEach(word => {
+        if (keywordsLower.includes(word)) {
+          score += 30;
+        }
+      });
 
-规则：
-1. 如果知识库中有相关内容，请基于知识库回答
-2. 如果没有相关内容，请说"抱歉，我没有找到相关的答案，建议您联系客服咨询"
-3. 回答要简洁、专业
-4. 只根据知识库内容回答，不要编造答案`,
+      queryWords.forEach(word => {
+        if (categoryLower.includes(word)) {
+          score += 15;
+        }
+      });
+
+      queryWords.forEach(word => {
+        if (answerLower.includes(word)) {
+          score += 5;
+        }
+      });
+
+      score += Math.min(item.hitCount * 0.1, 10);
+
+      return { item, score };
     });
 
-    messages.push({
-      role: 'user',
-      content: query,
-    });
+    const sorted = scored
+      .filter(s => s.score > 0)
+      .sort((a, b) => b.score - a.score);
 
-    const response = await fetch(apiUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${config.apiKey}`,
-      },
-      body: JSON.stringify({
-        model: config.modelId,
-        messages,
-        temperature: 0.7,
-      }),
-    });
+    let answer: string;
+    let related: { id: string; question: string; answer: string; score: number }[] = [];
 
-    if (!response.ok) {
-      throw new Error(`AI API error: ${response.status}`);
-    }
-
-    const data = await response.json();
-    const answer = data.choices?.[0]?.message?.content || '';
-
-    // 查找相关问答（简单的关键词匹配）
-    const related = qaItems
-      .filter(item => {
-        const lowerQuery = query.toLowerCase();
-        return (
-          item.question.toLowerCase().includes(lowerQuery) ||
-          item.keywords?.toLowerCase().includes(lowerQuery)
-        );
-      })
-      .slice(0, 3)
-      .map(item => ({
-        id: item.id,
-        question: item.question,
-        answer: item.answer,
+    if (sorted.length === 0) {
+      answer = '抱歉，没有找到相关答案。您可以尝试其他关键词，或联系客服咨询。';
+    } else {
+      const bestMatch = sorted[0].item;
+      answer = bestMatch.answer;
+      related = sorted.slice(1, 4).map(s => ({
+        id: s.item.id,
+        question: s.item.question,
+        answer: s.item.answer,
+        score: s.score,
       }));
+
+      await prisma.qaItem.update({
+        where: { id: bestMatch.id },
+        data: { hitCount: { increment: 1 } },
+      });
+    }
 
     return NextResponse.json({
       answer,
       related,
+      matchQuestion: sorted.length > 0 ? sorted[0].item.question : null,
     });
   } catch (error) {
-    console.error('QA search error:', error);
-    return NextResponse.json(
-      { error: '查询失败' },
-      { status: 500 }
-    );
+    console.error('Search QA error:', error);
+    return NextResponse.json({ error: '查询失败' }, { status: 500 });
   }
 }

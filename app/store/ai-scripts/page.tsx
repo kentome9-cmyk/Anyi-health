@@ -56,6 +56,7 @@ export default function StoreAIScriptsPage() {
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [searchKeyword, setSearchKeyword] = useState('');
   const [selectedScript, setSelectedScript] = useState<ScriptRecord | null>(null);
+  const [editingStats, setEditingStats] = useState<Record<string, { viewCount?: number; likeCount?: number }>>({});
 
   useEffect(() => {
     if (!_hasHydrated) return;
@@ -136,6 +137,40 @@ export default function StoreAIScriptsPage() {
     }
   };
 
+  const handleStatsChange = (id: string, field: 'viewCount' | 'likeCount', value: string) => {
+    const numValue = value === '' ? undefined : parseInt(value, 10);
+    setEditingStats(prev => ({
+      ...prev,
+      [id]: { ...prev[id], [field]: numValue }
+    }));
+    // 同时更新脚本列表中的显示
+    const updateScript = (list: ScriptRecord[]) => list.map(s => 
+      s.id === id ? { ...s, [field]: numValue } : s
+    );
+    setScripts(updateScript);
+    setPublicScripts(updateScript);
+  };
+
+  const handleStatsBlur = async (id: string) => {
+    const stats = editingStats[id];
+    if (!stats) return;
+    try {
+      await fetch(`/api/store/ai-scripts/${id}/stats?storeId=${storeId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(stats),
+      });
+      // 清除编辑状态
+      setEditingStats(prev => {
+        const newState = { ...prev };
+        delete newState[id];
+        return newState;
+      });
+    } catch (error) {
+      console.error('Failed to update stats:', error);
+    }
+  };
+
   const extractTopicDirection = (content: string) => {
     const summaryMatch = content.match(/【内容摘要】([\s\S]*?)(?=【切入角度】|$)/);
     const angleMatch = content.match(/【切入角度】([\s\S]*?)$/);
@@ -145,7 +180,7 @@ export default function StoreAIScriptsPage() {
     };
   };
 
-  const extractScriptMetadata = (content: string) => {
+  const extractScriptMetadata = (content: string): { titleSuggestion: string; script: string; hashtags: string[]; shootingTips: string[] } => {
     try {
       let jsonStr = content;
       if (content.includes('```json')) {
@@ -188,23 +223,26 @@ export default function StoreAIScriptsPage() {
     <Table>
       <TableHeader>
         <TableRow>
-          <TableHead className="w-[60px] text-center">日期</TableHead>
+          <TableHead className="w-[70px] text-center">日期</TableHead>
           <TableHead className="w-[50px] text-center">版本</TableHead>
           <TableHead className="w-[70px] text-center">类型</TableHead>
           <TableHead className="w-[120px] text-center">选题</TableHead>
-          <TableHead className="w-[80px] text-center">播放/点赞</TableHead>
-          <TableHead className="w-[80px] text-center">状态</TableHead>
+          <TableHead className="w-[80px] text-center">播放</TableHead>
+          <TableHead className="w-[80px] text-center">点赞</TableHead>
           <TableHead className="w-[120px] text-center">操作</TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
         {scriptList.map((script) => {
-          const { titleSuggestion, script: scriptContent, hashtags, shootingTips } = extractScriptMetadata(script.content);
-          const displayContent = scriptContent || script.content.substring(0, 50);
           return (
             <TableRow key={script.id}>
-              <TableCell className="text-xs text-gray-500 text-center">
-                {formatDate(script.createdAt)}
+              <TableCell className="text-center">
+                <div className="flex items-center justify-center gap-1">
+                  <span className={`w-2 h-2 rounded-full ${script.isFilmed ? 'bg-green-500' : 'bg-gray-300'}`} title={script.isFilmed ? '已拍摄' : '未拍摄'} />
+                  <span className="text-xs text-gray-500">
+                    {formatDate(script.createdAt)}
+                  </span>
+                </div>
               </TableCell>
               <TableCell className="text-center">
                 <span className="text-xs font-medium text-gray-700">v{script.version || 1}</span>
@@ -221,17 +259,29 @@ export default function StoreAIScriptsPage() {
                   {script.topicTitle || '无标题'}
                 </div>
               </TableCell>
-              <TableCell>
-                <div className="text-xs text-center">
-                  <span className="text-gray-600">{script.viewCount || 0}</span>
-                  <span className="text-gray-400 mx-0.5">/</span>
-                  <span className="text-gray-600">{script.likeCount || 0}</span>
-                </div>
+              <TableCell className="text-center">
+                <input
+                  type="number"
+                  min="0"
+                  value={script.viewCount || ''}
+                  onChange={(e) => handleStatsChange(script.id, 'viewCount', e.target.value)}
+                  onBlur={() => handleStatsBlur(script.id)}
+                  disabled={!script.isFilmed}
+                  className={`w-16 text-xs text-center border rounded px-1 py-0.5 ${!script.isFilmed ? 'border-gray-100 bg-gray-50 text-gray-400 cursor-not-allowed' : 'border-gray-200'}`}
+                  placeholder="—"
+                />
               </TableCell>
               <TableCell className="text-center">
-                <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${script.isFilmed ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'}`}>
-                  {script.isFilmed ? '✓ 已拍摄' : '○ 未拍摄'}
-                </span>
+                <input
+                  type="number"
+                  min="0"
+                  value={script.likeCount || ''}
+                  onChange={(e) => handleStatsChange(script.id, 'likeCount', e.target.value)}
+                  onBlur={() => handleStatsBlur(script.id)}
+                  disabled={!script.isFilmed}
+                  className={`w-16 text-xs text-center border rounded px-1 py-0.5 ${!script.isFilmed ? 'border-gray-100 bg-gray-50 text-gray-400 cursor-not-allowed' : 'border-gray-200'}`}
+                  placeholder="—"
+                />
               </TableCell>
               <TableCell className="text-center">
                 <div className="flex gap-1 justify-center">
@@ -265,12 +315,12 @@ export default function StoreAIScriptsPage() {
     <Table>
       <TableHeader>
         <TableRow>
-          <TableHead className="w-[60px] text-center">日期</TableHead>
+          <TableHead className="w-[70px] text-center">日期</TableHead>
           <TableHead className="w-[50px] text-center">版本</TableHead>
           <TableHead className="w-[70px] text-center">类型</TableHead>
           <TableHead className="w-[120px] text-center">选题</TableHead>
-          <TableHead className="w-[80px] text-center">播放/点赞</TableHead>
-          <TableHead className="w-[80px] text-center">状态</TableHead>
+          <TableHead className="w-[80px] text-center">播放</TableHead>
+          <TableHead className="w-[80px] text-center">点赞</TableHead>
           <TableHead className="w-[120px] text-center">操作</TableHead>
         </TableRow>
       </TableHeader>
@@ -278,8 +328,13 @@ export default function StoreAIScriptsPage() {
         {scriptList.map((script) => {
           return (
             <TableRow key={script.id}>
-              <TableCell className="text-xs text-gray-500 text-center">
-                {formatDate(script.createdAt)}
+              <TableCell className="text-center">
+                <div className="flex items-center justify-center gap-1">
+                  <span className={`w-2 h-2 rounded-full ${script.isFilmed ? 'bg-green-500' : 'bg-gray-300'}`} title={script.isFilmed ? '已拍摄' : '未拍摄'} />
+                  <span className="text-xs text-gray-500">
+                    {formatDate(script.createdAt)}
+                  </span>
+                </div>
               </TableCell>
               <TableCell className="text-center">
                 <span className="text-xs font-medium text-gray-700">v{script.version || 1}</span>
@@ -296,17 +351,29 @@ export default function StoreAIScriptsPage() {
                   {script.topicTitle || '无标题'}
                 </div>
               </TableCell>
-              <TableCell>
-                <div className="text-xs text-center">
-                  <span className="text-gray-600">{script.viewCount || 0}</span>
-                  <span className="text-gray-400 mx-0.5">/</span>
-                  <span className="text-gray-600">{script.likeCount || 0}</span>
-                </div>
+              <TableCell className="text-center">
+                <input
+                  type="number"
+                  min="0"
+                  value={script.viewCount || ''}
+                  onChange={(e) => handleStatsChange(script.id, 'viewCount', e.target.value)}
+                  onBlur={() => handleStatsBlur(script.id)}
+                  disabled={!script.isFilmed}
+                  className={`w-16 text-xs text-center border rounded px-1 py-0.5 ${!script.isFilmed ? 'border-gray-100 bg-gray-50 text-gray-400 cursor-not-allowed' : 'border-gray-200'}`}
+                  placeholder="—"
+                />
               </TableCell>
               <TableCell className="text-center">
-                <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${script.isFilmed ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'}`}>
-                  {script.isFilmed ? '✓ 已拍摄' : '○ 未拍摄'}
-                </span>
+                <input
+                  type="number"
+                  min="0"
+                  value={script.likeCount || ''}
+                  onChange={(e) => handleStatsChange(script.id, 'likeCount', e.target.value)}
+                  onBlur={() => handleStatsBlur(script.id)}
+                  disabled={!script.isFilmed}
+                  className={`w-16 text-xs text-center border rounded px-1 py-0.5 ${!script.isFilmed ? 'border-gray-100 bg-gray-50 text-gray-400 cursor-not-allowed' : 'border-gray-200'}`}
+                  placeholder="—"
+                />
               </TableCell>
               <TableCell className="text-center">
                 <div className="flex gap-1 justify-center">
