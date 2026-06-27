@@ -80,6 +80,8 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   try {
     const body = await request.json();
+    console.log('[DEBUG] Create customer request body:', JSON.stringify(body, null, 2));
+    
     const {
       name,
       phone,
@@ -97,7 +99,14 @@ export async function POST(request: Request) {
       weight,
     } = body;
 
+    console.log('[DEBUG] name:', name, 'phone:', phone, 'storeId:', storeId);
+    console.log('[DEBUG] age:', age, 'typeof:', typeof age);
+    console.log('[DEBUG] birthOrder:', birthOrder, 'typeof:', typeof birthOrder);
+    console.log('[DEBUG] height:', height, 'typeof:', typeof height);
+    console.log('[DEBUG] weight:', weight, 'typeof:', typeof weight);
+
     if (!name || !phone || !storeId) {
+      console.error('[ERROR] Validation failed: name/phone/storeId is empty');
       return NextResponse.json(
         { error: '姓名、手机号和门店不能为空' },
         { status: 400 }
@@ -109,6 +118,7 @@ export async function POST(request: Request) {
     });
 
     if (existingCustomer) {
+      console.error('[ERROR] Customer already exists with phone:', phone);
       return NextResponse.json(
         { error: '该手机号已存在' },
         { status: 400 }
@@ -134,14 +144,19 @@ export async function POST(request: Request) {
       },
     });
 
+    console.log('[DEBUG] Customer created successfully:', customer.id);
     return NextResponse.json({
       id: customer.id,
       name: customer.name,
     });
   } catch (error) {
-    console.error('Create customer error:', error);
+    console.error('[ERROR] Create customer error:', error);
+    if (error instanceof Error) {
+      console.error('[ERROR] Error message:', error.message);
+      console.error('[ERROR] Error stack:', error.stack);
+    }
     return NextResponse.json(
-      { error: '创建客户失败' },
+      { error: '创建客户失败', detail: error instanceof Error ? error.message : 'unknown' },
       { status: 500 }
     );
   }

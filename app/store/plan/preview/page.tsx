@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import {
@@ -161,6 +161,8 @@ export default function PlanPreviewPage() {
   const [showSaveModal, setShowSaveModal] = useState(false);
   const [existingPlanId, setExistingPlanId] = useState<string | null>(null);
 
+  const hasSavedRef = useRef(false);
+
   useEffect(() => {
     const reportIdParam = searchParams.get('reportId');
     let customerData: Customer | null = null;
@@ -189,11 +191,13 @@ export default function PlanPreviewPage() {
         console.error('Failed to read from sessionStorage:', error);
       }
 
-      if (needSaveToDb && storeIdForReport && customerData) {
+      if (needSaveToDb && storeIdForReport && customerData && !hasSavedRef.current) {
+        hasSavedRef.current = true;
+
         const saveToDb = async () => {
           if (!customerData || !analysisData) return;
           try {
-            const res = await fetch('/api/admin/reports', {
+            const res = await fetch('/api/store/reports', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
@@ -227,8 +231,25 @@ export default function PlanPreviewPage() {
             }
           } catch (error) {
             console.error('Failed to save report to DB (async):', error);
+            hasSavedRef.current = false;
           }
         };
+
+        try {
+          const tempData = {
+            customer: customerData,
+            analysis: analysisData,
+            reportId,
+            reportContent,
+            storeId: storeIdForReport,
+            reportDate,
+            needSaveToDb: false,
+          };
+          sessionStorage.setItem(storageKey, JSON.stringify(tempData));
+        } catch (e) {
+          console.error('Failed to update needSaveToDb flag:', e);
+        }
+
         saveToDb();
       }
     }
@@ -322,7 +343,7 @@ export default function PlanPreviewPage() {
 
     if (reportId) {
       try {
-        const res = await fetch(`/api/admin/plans?reportId=${encodeURIComponent(reportId)}&pageSize=1`);
+        const res = await fetch(`/api/store/plans?reportId=${encodeURIComponent(reportId)}&pageSize=1`);
         if (res.ok) {
           const data = await res.json();
           if (data.list && data.list.length > 0) {
@@ -371,7 +392,7 @@ export default function PlanPreviewPage() {
     };
 
     try {
-      const res = await fetch(existingPlanId ? `/api/admin/plans/${existingPlanId}` : '/api/admin/plans', {
+      const res = await fetch(existingPlanId ? `/api/store/plans/${existingPlanId}` : '/api/store/plans', {
         method: existingPlanId ? 'PUT' : 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),

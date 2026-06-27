@@ -73,6 +73,13 @@ const mockCustomers: Customer[] = [
   },
 ];
 
+const convertBirthOrderToNumber = (gestation: string): number | null => {
+  if (!gestation) return null;
+  const match = gestation.match(/(\d+)/);
+  if (match) return parseInt(match[1]);
+  return null;
+};
+
 export default function ReportSubmitPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -116,7 +123,7 @@ export default function ReportSubmitPage() {
     if (!storeId) return;
     setLoadingCustomers(true);
     try {
-      const res = await fetch(`/api/admin/customers?storeId=${storeId}&pageSize=100`);
+      const res = await fetch(`/api/store/customers?storeId=${storeId}&pageSize=100`);
       const data = await res.json();
       const list = data.list || [];
       setCustomers(list);
@@ -178,13 +185,15 @@ export default function ReportSubmitPage() {
     const postpartum = formData.postpartum;
     const delivery = selectedCustomer?.deliveryMethod || formData.delivery;
     const gestation = selectedCustomer?.birthOrder || formData.gestation;
+    const height = selectedCustomer?.height?.toString() || formData.height;
+    const weight = selectedCustomer?.weight?.toString() || formData.weight;
 
     const errors: string[] = [];
 
     if (!name?.trim()) errors.push('姓名');
     if (!age?.trim()) errors.push('年龄');
-    if (!formData.height?.trim()) errors.push('身高');
-    if (!formData.weight?.trim()) errors.push('体重');
+    if (!height?.trim()) errors.push('身高');
+    if (!weight?.trim()) errors.push('体重');
 
     if (errors.length > 0) {
       setValidationErrors(errors);
@@ -193,7 +202,7 @@ export default function ReportSubmitPage() {
     }
 
     if (!storeId) {
-      setValidationErrors(['闂ㄥ簵']);
+      setValidationErrors(['门店']);
       setShowValidationError(true);
       return;
     }
@@ -201,7 +210,7 @@ export default function ReportSubmitPage() {
     let customerId = selectedCustomer?.id;
     if (!customerId) {
       try {
-        const res = await fetch('/api/admin/customers', {
+        const res = await fetch('/api/store/customers', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -211,7 +220,7 @@ export default function ReportSubmitPage() {
             age,
             postpartumDays: postpartum,
             deliveryMethod: delivery,
-            birthOrder: gestation,
+            birthOrder: convertBirthOrderToNumber(gestation),
             hasAbortionHistory: Boolean(formData.miscarriage),
             allergy: formData.allergy,
             height: formData.height,
@@ -220,19 +229,22 @@ export default function ReportSubmitPage() {
         });
         const data = await res.json();
         if (!res.ok) {
-          throw new Error(data.error || 'Create customer failed');
+          console.error('Create customer API error:', data);
+          setValidationErrors([data.error || '客户保存失败']);
+          setShowValidationError(true);
+          return;
         }
         customerId = data.id;
       } catch (error) {
         console.error('Failed to create customer:', error);
-        setValidationErrors(['瀹㈡埛淇濆瓨']);
+        setValidationErrors(['客户保存失败']);
         setShowValidationError(true);
         return;
       }
     }
 
     if (!customerId) {
-      setValidationErrors(['瀹㈡埛']);
+      setValidationErrors(['客户']);
       setShowValidationError(true);
       return;
     }
@@ -516,7 +528,7 @@ export default function ReportSubmitPage() {
                 {loadingCustomers ? (
                   <tr>
                     <td colSpan={3} className="text-center py-8 text-gray-500 text-sm">
-                      鍔犺浇涓?..
+                      加载中...
                     </td>
                   </tr>
                 ) : filteredCustomers.length === 0 ? (

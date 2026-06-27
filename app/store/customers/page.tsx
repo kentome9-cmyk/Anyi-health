@@ -241,7 +241,7 @@ export default function StoreCustomersPage() {
       if (debouncedSearch) {
         params.append('keyword', debouncedSearch);
       }
-      const res = await fetch(`/api/admin/customers?${params}`);
+      const res = await fetch(`/api/store/customers?${params}`);
       const data = await res.json();
       setCustomers(data.list || []);
       setTotal(data.total || 0);
@@ -281,7 +281,7 @@ export default function StoreCustomersPage() {
       if (planId) {
         params.append('planId', planId);
       }
-      const res = await fetch(`/api/admin/body-records?${params.toString()}`);
+      const res = await fetch(`/api/store/body-records?${params.toString()}`);
       const data = await res.json();
       setServiceRecords(data.list || []);
     } catch (error) {
@@ -293,7 +293,7 @@ export default function StoreCustomersPage() {
 
   const loadCustomerPlans = async (customerId: string) => {
     try {
-      const res = await fetch(`/api/admin/plan-records/customer/${customerId}`);
+      const res = await fetch(`/api/store/plan-records/customer/${customerId}`);
       const data = await res.json();
       const plans = data.plans || [];
       setCustomerPlans(plans);
@@ -408,7 +408,7 @@ export default function StoreCustomersPage() {
   const handleDeleteServiceRecord = async (recordId: string) => {
     if (!selectedCustomer) return;
     try {
-      await fetch(`/api/admin/body-records/${recordId}`, {
+      await fetch(`/api/store/body-records/${recordId}`, {
         method: 'DELETE',
       });
       await loadServiceRecords(selectedCustomer.id, selectedPlanId || undefined);
@@ -421,7 +421,7 @@ export default function StoreCustomersPage() {
     setSelectedCustomer(customer);
     setLoadingReports(true);
     try {
-      const res = await fetch(`/api/admin/reports/customer/${customer.id}`);
+      const res = await fetch(`/api/store/reports/customer/${customer.id}`);
       const data = await res.json();
       if (data.list && data.list.length > 0) {
         setReportList(data.list);
@@ -445,7 +445,7 @@ export default function StoreCustomersPage() {
   const handleAddServiceRecord = async () => {
     if (!selectedCustomer || !newRecord.project.trim()) return;
     try {
-      const res = await fetch('/api/admin/body-records', {
+      const res = await fetch('/api/store/body-records', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

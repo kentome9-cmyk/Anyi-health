@@ -74,7 +74,7 @@ function ReportViewContent() {
 
     const loadReport = async () => {
       try {
-        const res = await fetch(`/api/admin/reports/${reportId}`);
+        const res = await fetch(`/api/store/reports/${reportId}`);
         const data = await res.json();
         setReport(res.ok ? data : null);
       } catch (error) {
