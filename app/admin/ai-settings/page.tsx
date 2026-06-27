@@ -48,6 +48,18 @@ const emptySettings: AiSettings = {
   embeddingModelId: '',
 };
 
+const normalizeAiSettings = (item: AiSettings): AiSettings => ({
+  ...item,
+  apiKey: item.apiKey || '',
+  agentId: item.agentId || '',
+  datasetId: item.datasetId || '',
+  baseUrl: item.baseUrl || '',
+  modelId: item.modelId || '',
+  embeddingApiKey: item.embeddingApiKey || '',
+  embeddingBaseUrl: item.embeddingBaseUrl || '',
+  embeddingModelId: item.embeddingModelId || '',
+});
+
 export default function AdminAiSettingsPage() {
   const [activeModule, setActiveModule] = useState('default');
   const [allSettings, setAllSettings] = useState<Record<string, AiSettings>>({});
@@ -80,17 +92,7 @@ export default function AdminAiSettingsPage() {
       const settingsMap: Record<string, AiSettings> = {};
       if (Array.isArray(data)) {
         data.forEach((item: AiSettings) => {
-          settingsMap[item.module] = {
-            ...item,
-            apiKey: item.apiKey || '',
-            agentId: item.agentId || '',
-            datasetId: item.datasetId || '',
-            baseUrl: item.baseUrl || '',
-            modelId: item.modelId || '',
-            embeddingApiKey: item.embeddingApiKey || '',
-            embeddingBaseUrl: item.embeddingBaseUrl || '',
-            embeddingModelId: item.embeddingModelId || '',
-          };
+          settingsMap[item.module] = normalizeAiSettings(item);
         });
       }
       
@@ -126,17 +128,7 @@ export default function AdminAiSettingsPage() {
         const savedData = await res.json();
         setAllSettings((prev) => ({
           ...prev,
-          [savedData.module]: {
-            ...savedData,
-            apiKey: savedData.apiKey || '',
-            agentId: savedData.agentId || '',
-            datasetId: savedData.datasetId || '',
-            baseUrl: savedData.baseUrl || '',
-            modelId: savedData.modelId || '',
-            embeddingApiKey: savedData.embeddingApiKey || '',
-            embeddingBaseUrl: savedData.embeddingBaseUrl || '',
-            embeddingModelId: savedData.embeddingModelId || '',
-          },
+          [savedData.module]: normalizeAiSettings(savedData),
         }));
         setSaved(true);
         setTimeout(() => setSaved(false), 3000);
@@ -204,7 +196,7 @@ export default function AdminAiSettingsPage() {
 
       {/* 模块选择 Tabs */}
       <Tabs value={activeModule} onValueChange={setActiveModule}>
-        <TabsList className="grid w-full grid-cols-4">
+        <TabsList className="grid w-full grid-cols-3">
           {MODULES.map((mod) => (
             <TabsTrigger key={mod.id} value={mod.id}>
               {mod.name}

@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { logOperation } from '@/lib/operation-log';
 
 export async function GET(request: Request) {
   try {
@@ -74,6 +75,15 @@ export async function PUT(request: Request) {
         },
       });
     }
+
+    logOperation({
+      action: existing ? 'update' : 'create',
+      module: 'ai_settings',
+      targetId: moduleId,
+      targetName: `AI设置-${moduleId}`,
+      detail: existing ? `更新模块【${moduleId}】的AI配置` : `创建模块【${moduleId}】的AI配置`,
+      request,
+    });
 
     return NextResponse.json(settings);
   } catch (error) {

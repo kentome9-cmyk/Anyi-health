@@ -1,17 +1,26 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import dynamic from 'next/dynamic';
 import { useRouter, useParams } from 'next/navigation';
 import { useAuthStore } from '@/stores/auth.store';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import {
   FileText,
   ArrowLeft,
   Presentation,
   Loader2,
   Download,
+  ChevronLeft,
+  ChevronRight,
+  ZoomIn,
+  ZoomOut,
+  Maximize2,
+  Minimize2,
+  RotateCcw,
 } from '@/lib/icons';
+import type { PdfViewerRef } from './PdfViewer';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import type { Components } from 'react-markdown';
@@ -164,6 +173,31 @@ export default function LearningResourceDetailPage() {
     return lower.endsWith('.ppt') || lower.endsWith('.pptx');
   }, [resource]);
 
+  // PDF 工具栏状态（位于标题行）
+  const pdfRef = useRef<PdfViewerRef>(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageInput, setPageInput] = useState('1');
+  const [numPages, setNumPages] = useState(0);
+  const [scale, setScale] = useState(1);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+
+  // 监听全屏变化
+  useEffect(() => {
+    const handleFsChange = () => setIsFullscreen(!!document.fullscreenElement);
+    document.addEventListener('fullscreenchange', handleFsChange);
+    return () => document.removeEventListener('fullscreenchange', handleFsChange);
+  }, []);
+
+  const handlePageInputSubmit = () => {
+    const num = parseInt(pageInput, 10);
+    if (!isNaN(num) && num >= 1 && num <= numPages) {
+      setCurrentPage(num);
+      pdfRef.current?.handlePageInputSubmit(num);
+    } else {
+      setPageInput(String(currentPage));
+    }
+  };
+
   const handlePptxDownload = () => {
     if (resource?.filePath) {
       const a = document.createElement('a');
@@ -214,18 +248,124 @@ export default function LearningResourceDetailPage() {
 
         <div className="bg-white rounded-lg border border-gray-200 overflow-hidden flex flex-col mx-auto" style={{ height: 'calc(100vh - 120px)', maxWidth: 'min(100%, 1400px)' }}>
           <div className="px-6 py-4 border-b border-gray-200 flex-shrink-0">
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               {resource.type === 'md' ? (
                 <FileText className="h-5 w-5 text-blue-600" />
               ) : (
                 <Presentation className="h-5 w-5 text-orange-600" />
               )}
               <h1 className="text-xl font-bold text-gray-900">{resource.title}</h1>
-            </div>
-            <div className="flex items-center gap-3 mt-2 text-sm text-gray-500">
-              <span className="px-2 py-0.5 bg-gray-100 rounded text-xs">{resource.category}</span>
-              {resource.fileSize && <span>大小：{resource.fileSize}</span>}
-              {resource.pageCount && <span>{resource.pageCount} 页</span>}
+              <span className="px-2 py-0.5 bg-gray-100 rounded text-xs text-gray-600">{resource.category}</span>
+              {resource.fileSize && <span className="text-sm text-gray-500">大小：{resource.fileSize}</span>}
+              {resource.pageCount && <span className="text-sm text-gray-500">{resource.pageCount} 页</span>}
+
+              {/* PDF 工具栏 - 嵌入标题行 */}
+              {isPdf && (
+                <div className="flex items-center gap-1.5 ml-auto flex-wrap">
+                  {/* 翻页 */}
+                  <div className="flex items-center gap-1">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-7 w-7"
+                      onClick={() => pdfRef.current?.handlePrevPage()}
+                      disabled={currentPage <= 1}
+                      title="上一页"
+                    >
+                      <ChevronLeft className="h-4 w-4" />
+                    </Button>
+                    <div className="flex items-center gap-1 text-sm">
+                      <Input
+                        type="text"
+                        value={pageInput}
+                        onChange={(e) => setPageInput((e.target as HTMLInputElement).value)}
+                        onBlur={handlePageInputSubmit}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') handlePageInputSubmit();
+                        }}
+                        className="h-7 w-12 text-center px-1 text-xs"
+                      />
+                      <span className="text-gray-500 whitespace-nowrap text-xs">/ {numPages || '?'} 页</span>
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-7 w-7"
+                      onClick={() => pdfRef.current?.handleNextPage()}
+                      disabled={numPages > 0 && currentPage >= numPages}
+                      title="下一页"
+                    >
+                      <ChevronRight className="h-4 w-4" />
+                    </Button>
+                  </div>
+
+                  <div className="w-px h-5 bg-gray-200" />
+
+                  {/* 缩放 */}
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7"
+                    onClick={() => pdfRef.current?.handleZoomOut()}
+                    disabled={scale <= 0.5}
+                    title="缩小"
+                  >
+                    <ZoomOut className="h-4 w-4" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      pdfRef.current?.handleResetZoom();
+                      setScale(1);
+                    }}
+                    className="h-7 px-2 text-xs font-medium"
+                    title="重置缩放"
+                  >
+                    <RotateCcw className="h-3 w-3 mr-1" />
+                    {Math.round(scale * 100)}%
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7"
+                    onClick={() => pdfRef.current?.handleZoomIn()}
+                    disabled={scale >= 3}
+                    title="放大"
+                  >
+                    <ZoomIn className="h-4 w-4" />
+                  </Button>
+
+                  <div className="w-px h-5 bg-gray-200" />
+
+                  {/* 下载 */}
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => pdfRef.current?.handleDownload(resource.title)}
+                    className="h-7 px-2 text-xs"
+                    title="下载"
+                  >
+                    <Download className="h-3.5 w-3.5 mr-1" />
+                    下载
+                  </Button>
+
+                  {/* 全屏 */}
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7"
+                    onClick={() => pdfRef.current?.toggleFullscreen()}
+                    title={isFullscreen ? '退出全屏' : '全屏'}
+                  >
+                    {isFullscreen ? (
+                      <Minimize2 className="h-4 w-4" />
+                    ) : (
+                      <Maximize2 className="h-4 w-4" />
+                    )}
+                  </Button>
+                </div>
+              )}
             </div>
             {resource.description && (
               <p className="text-sm text-gray-600 mt-3">{resource.description}</p>
@@ -252,8 +392,15 @@ export default function LearningResourceDetailPage() {
             </div>
           ) : isPdf ? (
             <PdfViewer
+              ref={pdfRef}
               filePath={resource.filePath!}
               title={resource.title}
+              onPageChange={(p) => {
+                setCurrentPage(p);
+                setPageInput(String(p));
+              }}
+              onLoaded={(total) => setNumPages(total)}
+              onScaleChange={(s) => setScale(s)}
             />
           ) : isPptx ? (
             <div className="p-12 flex-1 flex flex-col items-center justify-center bg-gray-50">

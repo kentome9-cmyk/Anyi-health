@@ -19,10 +19,9 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import {
-  FileText, Search, Send, Lightbulb, Eye, ChevronDown, ChevronRight
-} from '@/lib/icons';
+import { FileText, Search, Send, Lightbulb, Eye, ChevronDown, ChevronRight } from '@/lib/icons';
 import { useAuthStore } from '@/stores/auth.store';
+import { extractScriptContent } from '@/lib/script-utils';
 
 interface ScriptRecord {
   id: string;
@@ -113,14 +112,7 @@ export default function StoreAITopicLibraryPage() {
     setSelectedTopic({ ...topic, scripts: [script] });
   };
 
-  const extractScriptContent = (content: string) => {
-    try {
-      const json = JSON.parse(content);
-      return json.script || json.rewrittenScript || content;
-    } catch {
-      return content;
-    }
-  };
+
 
   const filteredTopics = topics.filter(topic => {
     if (!searchKeyword) return true;

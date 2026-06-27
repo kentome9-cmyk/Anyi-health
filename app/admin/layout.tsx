@@ -1,13 +1,11 @@
 'use client';
 
-import { useEffect } from 'react';
-import Link from 'next/link';
 import { useRouter, usePathname } from 'next/navigation';
-import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { useAuthStore } from '@/stores/auth.store';
 import { SidebarNav } from '@/components/ui/sidebar-nav';
 import {
+  LogOut,
   LayoutDashboard,
   Store,
   Users,
@@ -20,7 +18,11 @@ import {
   Lightbulb,
   Heart,
   Sparkles,
+  User,
+  ClipboardList,
 } from '@/lib/icons';
+import { useAuthGuard } from '@/hooks/use-auth-guard';
+import { useSiteSettings } from '@/hooks/use-site-settings';
 
 const navigation = [
   { name: '首页', href: '/admin', icon: LayoutDashboard },
@@ -58,6 +60,15 @@ const navigation = [
     ],
   },
   { name: 'AI 设置', href: '/admin/ai-settings', icon: Settings },
+  {
+    name: '系统管理',
+    icon: Settings,
+    children: [
+      { name: '系统设置', href: '/admin/settings', icon: Settings },
+      { name: '管理员账号', href: '/admin/admins', icon: User },
+      { name: '系统日志', href: '/admin/operation-logs', icon: ClipboardList },
+    ],
+  },
 ];
 
 export default function AdminLayout({
@@ -67,18 +78,19 @@ export default function AdminLayout({
 }) {
   const router = useRouter();
   const pathname = usePathname();
-  const { isAuthenticated, userType, _hasHydrated } = useAuthStore();
+  const { logout } = useAuthStore();
+  const { _hasHydrated } = useAuthGuard({ requiredUserType: 'admin', redirectPath: '/login/admin' });
+  const { themeColor, siteName, siteSubtitle } = useSiteSettings();
 
-  useEffect(() => {
-    if (!_hasHydrated) return;
-    if (!isAuthenticated) {
-      router.push('/login/admin');
-      return;
+  const handleLogout = async () => {
+    try {
+      await fetch('/api/auth/logout', { method: 'POST' });
+    } catch {
+      // 忽略错误，继续清理本地状态
     }
-    if (userType !== 'admin') {
-      router.push('/login/admin');
-    }
-  }, [_hasHydrated, isAuthenticated, userType, router]);
+    logout();
+    router.push('/login/admin');
+  };
 
   if (!_hasHydrated) {
     return null;
@@ -87,32 +99,49 @@ export default function AdminLayout({
   return (
     <div className="flex min-h-screen bg-gray-50">
       {/* 侧边栏 */}
-      <aside className="w-60 flex flex-col" style={{ backgroundColor: '#044332' }}>
+      <aside
+        className="w-60 flex flex-col flex-shrink-0"
+        style={{ backgroundColor: themeColor }}
+      >
         {/* Logo 区域 */}
         <div className="px-5 py-5">
-          <h1 className="text-base font-semibold text-white">产后健康管理</h1>
-          <p className="text-xs mt-0.5" style={{ color: 'rgba(255,255,255,0.7)' }}>管理员后台</p>
+          <h1 className="text-base font-semibold text-white truncate">{siteName}</h1>
+          <p className="text-xs mt-0.5" style={{ color: 'rgba(255,255,255,0.7)' }}>
+            {siteSubtitle || '管理员后台'}
+          </p>
         </div>
-        
+
         {/* 导航 */}
         <nav className="flex-1 px-3 overflow-y-auto">
           <SidebarNav items={navigation} pathname={pathname} />
         </nav>
 
-        {/* 底部退出 */}
-        <div className="p-3 mt-auto">
-          <Link href="/login">
-            <Button 
-              variant="ghost" 
-              className="w-full justify-start text-sm"
-              style={{ 
-                color: 'rgba(255,255,255,0.8)',
-                backgroundColor: 'transparent',
-              }}
-            >
-              退出登录
-            </Button>
-          </Link>
+        {/* 底部：我的 + 退出 */}
+        <div className="p-3 mt-auto space-y-1">
+          <Button
+            variant="ghost"
+            className="w-full justify-start text-sm"
+            style={{
+              color: 'rgba(255,255,255,0.8)',
+              backgroundColor: 'transparent',
+            }}
+            onClick={() => router.push('/admin/profile')}
+          >
+            <User className="h-4 w-4 mr-2" />
+            我的账号
+          </Button>
+          <Button
+            variant="ghost"
+            className="w-full justify-start text-sm"
+            style={{
+              color: 'rgba(255,255,255,0.8)',
+              backgroundColor: 'transparent',
+            }}
+            onClick={handleLogout}
+          >
+            <LogOut className="h-4 w-4 mr-2" />
+            退出登录
+          </Button>
         </div>
       </aside>
 

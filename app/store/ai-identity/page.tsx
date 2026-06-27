@@ -6,58 +6,32 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { User, Lock, Check, Sparkles } from '@/lib/icons';
+import { useCreatorIdentity } from '@/hooks/use-creator-identity';
 import { useAuthStore } from '@/stores/auth.store';
-
-interface CreatorIdentity {
-  id: string;
-  storeId: string;
-  contentTrack: string;
-  personaStyle: string;
-  targetAudience: string;
-  videoTone: string;
-  videoDuration: string;
-  createdAt: string;
-  updatedAt: string;
-}
 
 export default function StoreAIIdentityPage() {
   const { storeId } = useAuthStore();
-  const [identity, setIdentity] = useState<CreatorIdentity | null>(null);
-  const [loading, setLoading] = useState(true);
+  const { identity, loading, loadIdentity } = useCreatorIdentity();
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState({
-    contentTrack: '',
-    personaStyle: '',
-    targetAudience: '',
-    videoTone: '',
-    videoDuration: '',
+    contentTrack: identity?.contentTrack || '',
+    personaStyle: identity?.personaStyle || '',
+    targetAudience: identity?.targetAudience || '',
+    videoTone: identity?.videoTone || '',
+    videoDuration: identity?.videoDuration || '',
   });
 
   useEffect(() => {
-    loadIdentity();
-  }, [storeId]);
-
-  const loadIdentity = async () => {
-    try {
-      setLoading(true);
-      const res = await fetch(`/api/store/creator-identity?storeId=${storeId}`);
-      const data = await res.json();
-      if (data.identity) {
-        setIdentity(data.identity);
-        setForm({
-          contentTrack: data.identity.contentTrack || '',
-          personaStyle: data.identity.personaStyle || '',
-          targetAudience: data.identity.targetAudience || '',
-          videoTone: data.identity.videoTone || '',
-          videoDuration: data.identity.videoDuration || '',
-        });
-      }
-    } catch (error) {
-      console.error('Failed to load identity:', error);
-    } finally {
-      setLoading(false);
+    if (identity) {
+      setForm({
+        contentTrack: identity.contentTrack || '',
+        personaStyle: identity.personaStyle || '',
+        targetAudience: identity.targetAudience || '',
+        videoTone: identity.videoTone || '',
+        videoDuration: identity.videoDuration || '',
+      });
     }
-  };
+  }, [identity]);
 
   const handleSave = async () => {
     if (!form.contentTrack || !form.personaStyle || !form.targetAudience) {
@@ -73,7 +47,7 @@ export default function StoreAIIdentityPage() {
       });
       const data = await res.json();
       if (data.identity) {
-        setIdentity(data.identity);
+        await loadIdentity();
         alert('保存成功');
       }
     } catch (error) {

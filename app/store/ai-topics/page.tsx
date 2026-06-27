@@ -10,6 +10,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Loader2, Lightbulb, Sparkles, Lock, User, Wand2, Library, Check, Send } from '@/lib/icons';
 import NextLink from 'next/link';
+import { useCreatorIdentity } from '@/hooks/use-creator-identity';
 
 interface Topic {
   id?: string;
@@ -20,26 +21,16 @@ interface Topic {
   savedAt?: number;
 }
 
-interface CreatorIdentity {
-  id: string;
-  contentTrack: string;
-  personaStyle: string;
-  targetAudience: string;
-  videoTone?: string | null;
-}
-
 export default function StoreTopicsPage() {
   const router = useRouter();
   const { storeId, userType, isAuthenticated, _hasHydrated } = useAuthStore();
+  const { identity } = useCreatorIdentity();
 
   // 选题配置
   const [accountStage, setAccountStage] = useState('冷启动期');
   const [contentDirection, setContentDirection] = useState('全部');
   const [decisionStage, setDecisionStage] = useState('');
   const [topicCount, setTopicCount] = useState('10');
-
-  // 创作者身份
-  const [identity, setIdentity] = useState<CreatorIdentity | null>(null);
 
   // 选题结果
   const [topics, setTopics] = useState<Topic[]>([]);
@@ -58,26 +49,6 @@ export default function StoreTopicsPage() {
       return;
     }
   }, [_hasHydrated, isAuthenticated, userType, router]);
-
-  // 加载创作者身份
-  useEffect(() => {
-    if (!storeId) return;
-    loadIdentity();
-  }, [storeId]);
-
-  const loadIdentity = async () => {
-    try {
-      const res = await fetch(`/api/store/creator-identity?storeId=${storeId}`);
-      if (res.ok) {
-        const data = await res.json();
-        if (data?.identity) {
-          setIdentity(data.identity);
-        }
-      }
-    } catch (err) {
-      console.error('Failed to load identity:', err);
-    }
-  };
 
   const handleGenerate = async () => {
     if (!identity) {

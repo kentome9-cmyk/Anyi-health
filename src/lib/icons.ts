@@ -25,6 +25,7 @@ export {
   ChevronsLeft,
   ChevronsRight,
   ChevronDown,
+  ChevronUp,
   Send,
   Bot,
   Sparkles,
@@ -75,4 +76,8 @@ export {
   Maximize2,
   Minimize2,
   RotateCcw,
+  Rocket,
+  CircleAlert,
+  XCircle,
+  Palette,
 } from 'lucide-react';

@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { logOperation } from '@/lib/operation-log';
 
 export async function GET() {
   try {
@@ -40,6 +41,15 @@ export async function POST(request: Request) {
       },
     });
 
+    logOperation({
+      action: 'create',
+      module: 'prompt',
+      targetId: prompt.id,
+      targetName: prompt.name,
+      detail: `创建提示词：${prompt.name}（${type}）`,
+      request,
+    });
+
     return NextResponse.json(prompt);
   } catch (error) {
     console.error('Create prompt error:', error);
@@ -74,6 +84,15 @@ export async function PUT(request: Request) {
       },
     });
 
+    logOperation({
+      action: 'update',
+      module: 'prompt',
+      targetId: prompt.id,
+      targetName: prompt.name,
+      detail: `更新提示词：${prompt.name}`,
+      request,
+    });
+
     return NextResponse.json(prompt);
   } catch (error) {
     console.error('Update prompt error:', error);
@@ -96,8 +115,22 @@ export async function DELETE(request: Request) {
       );
     }
 
+    const prompt = await prisma.prompt.findUnique({
+      where: { id },
+      select: { name: true, type: true },
+    });
+
     await prisma.prompt.delete({
       where: { id },
+    });
+
+    logOperation({
+      action: 'delete',
+      module: 'prompt',
+      targetId: id,
+      targetName: prompt?.name,
+      detail: prompt ? `删除提示词：${prompt.name}（${prompt.type}）` : `删除提示词 ID：${id}`,
+      request,
     });
 
     return NextResponse.json({ success: true });

@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import bcrypt from 'bcryptjs';
+import { logOperation } from '@/lib/operation-log';
 
 type RouteContext = {
   params: Promise<{ id: string }>;
@@ -174,8 +175,29 @@ export async function DELETE(
 ) {
   try {
     const { id } = await params;
+    const customer = await prisma.customer.findUnique({
+      where: { id },
+      select: { name: true, phone: true, store: { select: { storeName: true } } },
+    });
+
+    if (!customer) {
+      return NextResponse.json(
+        { error: '客户不存在' },
+        { status: 404 }
+      );
+    }
+
     await prisma.customer.delete({
       where: { id },
+    });
+
+    logOperation({
+      action: 'delete',
+      module: 'customer',
+      targetId: id,
+      targetName: customer.name,
+      detail: `删除客户：${customer.name}（${customer.phone}），所属门店：${customer.store?.storeName ?? '未知'}`,
+      request,
     });
 
     return NextResponse.json({

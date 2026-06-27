@@ -145,6 +145,34 @@ function cosineSimilarity(a: number[], b: number[]): number {
   return dotProduct / denominator;
 }
 
+interface EmbeddableItem {
+  id: string;
+  embedding: unknown | null | undefined;
+}
+
+async function searchByEmbedding<T extends EmbeddableItem>(
+  queryEmbedding: number[],
+  items: T[],
+  transform: (item: T, similarity: number) => unknown,
+  topK: number = 5,
+  minSimilarity: number = 0.5
+): Promise<unknown[]> {
+  const itemsWithEmbedding = items.filter(item => item.embedding !== null && item.embedding !== undefined);
+  const matches: unknown[] = [];
+
+  for (const item of itemsWithEmbedding) {
+    const itemEmbedding = item.embedding as number[];
+    const similarity = cosineSimilarity(queryEmbedding, itemEmbedding);
+    
+    if (similarity >= minSimilarity) {
+      matches.push(transform(item, similarity));
+    }
+  }
+
+  matches.sort((a: any, b: any) => b.similarity - a.similarity);
+  return matches.slice(0, topK);
+}
+
 interface KnowledgeMatch {
   id: string;
   project: string;
@@ -165,11 +193,7 @@ export async function searchKnowledgeByEmbedding(
   minSimilarity: number = 0.5
 ): Promise<KnowledgeMatch[]> {
   const queryEmbedding = await getEmbedding(queryText, module);
-  
-  if (!queryEmbedding) {
-    console.log('[Vector Search] 无法获取查询向量');
-    return [];
-  }
+  if (!queryEmbedding) return [];
 
   const allKnowledge = await prisma.knowledgeBase.findMany({
     select: {
@@ -186,33 +210,18 @@ export async function searchKnowledgeByEmbedding(
     },
   });
 
-  const knowledgeWithEmbedding = allKnowledge.filter(kb => kb.embedding !== null && kb.embedding !== undefined);
-
-  const matches: KnowledgeMatch[] = [];
-
-  for (const item of knowledgeWithEmbedding) {
-    const itemEmbedding = item.embedding as number[];
-    const similarity = cosineSimilarity(queryEmbedding, itemEmbedding);
-    
-    if (similarity >= minSimilarity) {
-      matches.push({
-        id: item.id,
-        project: item.project,
-        manifestation: item.manifestation,
-        pairingEffect: item.pairingEffect,
-        symptom: item.symptom,
-        pairingItem: item.pairingItem,
-        pairingReason: item.pairingReason,
-        carePlan: item.carePlan,
-        effectEstimation: item.effectEstimation,
-        similarity,
-      });
-    }
-  }
-
-  matches.sort((a, b) => b.similarity - a.similarity);
-  
-  return matches.slice(0, topK);
+  return searchByEmbedding(queryEmbedding, allKnowledge, (item, similarity) => ({
+    id: item.id,
+    project: item.project,
+    manifestation: item.manifestation,
+    pairingEffect: item.pairingEffect,
+    symptom: item.symptom,
+    pairingItem: item.pairingItem,
+    pairingReason: item.pairingReason,
+    carePlan: item.carePlan,
+    effectEstimation: item.effectEstimation,
+    similarity,
+  }), topK, minSimilarity) as Promise<KnowledgeMatch[]>;
 }
 
 export function formatKnowledgeContext(matches: KnowledgeMatch[]): string {
@@ -308,32 +317,19 @@ async function searchProductsByEmbedding(
     },
   });
 
-  const productsWithEmbedding = allProducts.filter(p => p.embedding !== null && p.embedding !== undefined);
-  const matches: ProductMatch[] = [];
-
-  for (const item of productsWithEmbedding) {
-    const itemEmbedding = item.embedding as number[];
-    const similarity = cosineSimilarity(queryEmbedding, itemEmbedding);
-
-    if (similarity >= minSimilarity) {
-      matches.push({
-        type: 'product',
-        id: item.id,
-        category: item.category,
-        name: item.name,
-        spec: item.spec,
-        price: item.price,
-        ingredients: item.ingredients,
-        effects: item.effects,
-        targetAudience: item.targetAudience,
-        usage: item.usage,
-        similarity,
-      });
-    }
-  }
-
-  matches.sort((a, b) => b.similarity - a.similarity);
-  return matches.slice(0, topK);
+  return searchByEmbedding(queryEmbedding, allProducts, (item, similarity) => ({
+    type: 'product' as const,
+    id: item.id,
+    category: item.category,
+    name: item.name,
+    spec: item.spec,
+    price: item.price,
+    ingredients: item.ingredients,
+    effects: item.effects,
+    targetAudience: item.targetAudience,
+    usage: item.usage,
+    similarity,
+  }), topK, minSimilarity) as Promise<ProductMatch[]>;
 }
 
 async function searchHealthPlansByEmbedding(
@@ -352,28 +348,15 @@ async function searchHealthPlansByEmbedding(
     },
   });
 
-  const plansWithEmbedding = allPlans.filter(p => p.embedding !== null && p.embedding !== undefined);
-  const matches: HealthPlanMatch[] = [];
-
-  for (const item of plansWithEmbedding) {
-    const itemEmbedding = item.embedding as number[];
-    const similarity = cosineSimilarity(queryEmbedding, itemEmbedding);
-
-    if (similarity >= minSimilarity) {
-      matches.push({
-        type: 'healthPlan',
-        id: item.id,
-        typeField: item.type,
-        targetAudience: item.targetAudience,
-        productCombo: item.productCombo,
-        usage: item.usage,
-        similarity,
-      });
-    }
-  }
-
-  matches.sort((a, b) => b.similarity - a.similarity);
-  return matches.slice(0, topK);
+  return searchByEmbedding(queryEmbedding, allPlans, (item, similarity) => ({
+    type: 'healthPlan' as const,
+    id: item.id,
+    typeField: item.type,
+    targetAudience: item.targetAudience,
+    productCombo: item.productCombo,
+    usage: item.usage,
+    similarity,
+  }), topK, minSimilarity) as Promise<HealthPlanMatch[]>;
 }
 
 export async function searchMenstrualKnowledgeByEmbedding(
@@ -383,11 +366,7 @@ export async function searchMenstrualKnowledgeByEmbedding(
   minSimilarity: number = 0.5
 ): Promise<MenstrualCombinedMatch[]> {
   const queryEmbedding = await getEmbedding(queryText, module);
-
-  if (!queryEmbedding) {
-    console.log('[Menstrual Vector Search] 无法获取查询向量');
-    return [];
-  }
+  if (!queryEmbedding) return [];
 
   const allKnowledge = await prisma.menstrualKnowledgeBase.findMany({
     select: {
@@ -403,33 +382,23 @@ export async function searchMenstrualKnowledgeByEmbedding(
     },
   });
 
-  const knowledgeWithEmbedding = allKnowledge.filter(kb => kb.embedding !== null && kb.embedding !== undefined);
-  const matches: MenstrualCombinedMatch[] = [];
-
-  for (const item of knowledgeWithEmbedding) {
-    const itemEmbedding = item.embedding as number[];
-    const similarity = cosineSimilarity(queryEmbedding, itemEmbedding);
-
-    if (similarity >= minSimilarity) {
-      matches.push({
-        type: 'knowledge',
-        id: item.id,
-        category: item.category,
-        symptom: item.symptom,
-        cause: item.cause,
-        suggestion: item.suggestion,
-        dietAdvice: item.dietAdvice,
-        lifestyleAdvice: item.lifestyleAdvice,
-        attention: item.attention,
-        similarity,
-      });
-    }
-  }
+  const knowledgeMatches = await searchByEmbedding(queryEmbedding, allKnowledge, (item, similarity) => ({
+    type: 'knowledge' as const,
+    id: item.id,
+    category: item.category,
+    symptom: item.symptom,
+    cause: item.cause,
+    suggestion: item.suggestion,
+    dietAdvice: item.dietAdvice,
+    lifestyleAdvice: item.lifestyleAdvice,
+    attention: item.attention,
+    similarity,
+  }), topK, minSimilarity) as MenstrualCombinedMatch[];
 
   const productMatches = await searchProductsByEmbedding(queryEmbedding, topK, minSimilarity);
   const healthPlanMatches = await searchHealthPlansByEmbedding(queryEmbedding, topK, minSimilarity);
 
-  const allMatches = [...matches, ...productMatches, ...healthPlanMatches];
+  const allMatches = [...knowledgeMatches, ...productMatches, ...healthPlanMatches];
   allMatches.sort((a, b) => b.similarity - a.similarity);
 
   return allMatches.slice(0, topK * 2);

@@ -58,22 +58,33 @@ export async function createAdmin(
 export async function validateStoreUser(
   phone: string,
   password: string
-): Promise<{ id: string; phone: string; name: string | null; storeId: string | null } | null> {
+): Promise<{ id: string; phone: string; name: string | null; storeId: string | null; permissions: string[] | null } | null> {
   const user = await prisma.storeUser.findUnique({
     where: { phone },
     include: { stores: { select: { id: true }, take: 1 } },
   });
 
   if (!user) return null;
+  if (!user.status) return null;
 
   const isValid = await verifyPassword(password, user.password);
   if (!isValid) return null;
+
+  let permissions: string[] | null = null;
+  if (user.permissions) {
+    try {
+      permissions = JSON.parse(user.permissions);
+    } catch {
+      permissions = null;
+    }
+  }
 
   return {
     id: user.id,
     phone: user.phone,
     name: user.name,
     storeId: user.stores[0]?.id ?? null,
+    permissions,
   };
 }
 

@@ -7,7 +7,8 @@ import { Input } from '@/components/ui/input';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
-import { Plus, Search, Edit, Trash2, Store, Phone, Lock, User } from '@/lib/icons';
+import { Plus, Search, Edit, Trash2, Store, Phone, Lock, User, RefreshCw, Settings } from '@/lib/icons';
+import { StoreForm } from './StoreForm';
 import { DataTablePagination } from '@/components/ui/data-table-pagination';
 import { useDataTablePagination } from '@/hooks/use-data-table-pagination';
 
@@ -26,6 +27,7 @@ interface StoreItem {
     id: string;
     phone: string;
     name: string | null;
+    permissions: string | null;
   } | null;
 }
 
@@ -33,7 +35,6 @@ export default function AdminStoresPage() {
   const [stores, setStores] = useState<StoreItem[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [isAddOpen, setIsAddOpen] = useState(false);
-  const [isEditOpen, setIsEditOpen] = useState(false);
   const [editingStore, setEditingStore] = useState<StoreItem | null>(null);
   const [loading, setLoading] = useState(true);
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
@@ -187,7 +188,7 @@ export default function AdminStoresPage() {
       userPassword: '',
       userName: store.storeUser?.name || '',
     });
-    setIsEditOpen(true);
+    setIsAddOpen(true);
   };
 
   const handleEditSubmit = async (e: React.FormEvent) => {
@@ -201,7 +202,7 @@ export default function AdminStoresPage() {
         body: JSON.stringify(formData),
       });
       if (res.ok) {
-        setIsEditOpen(false);
+        setIsAddOpen(false);
         setEditingStore(null);
         resetForm();
         loadStores();
@@ -225,6 +226,91 @@ export default function AdminStoresPage() {
       }
     } catch (error) {
       console.error('Failed to delete store:', error);
+    }
+  };
+
+  const handleResetPassword = async (store: StoreItem) => {
+    if (!confirm(`确定要重置门店"${store.storeName}"的登录密码吗？\n\n重置后密码为：123456\n\n请告知门店人员及时修改密码。`)) return;
+    try {
+      const res = await fetch(`/api/admin/stores/${store.id}/reset-password`, {
+        method: 'POST',
+      });
+      if (res.ok) {
+        const data = await res.json();
+        alert(`密码已重置为：${data.defaultPassword}\n\n请告知门店人员及时修改。`);
+      } else {
+        const errData = await res.json();
+        alert(errData.error || '重置失败');
+      }
+    } catch (error) {
+      console.error('Failed to reset password:', error);
+      alert('重置失败');
+    }
+  };
+
+  // ========== 权限配置 ==========
+  const [isPermOpen, setIsPermOpen] = useState(false);
+  const [permStore, setPermStore] = useState<StoreItem | null>(null);
+  const [permList, setPermList] = useState<string[]>([]);
+  const [permSaving, setPermSaving] = useState(false);
+
+  const PERM_OPTIONS = [
+    { key: 'profile', label: '个人资料', desc: '修改个人信息、密码' },
+    { key: 'customer_manage', label: '客户管理', desc: '客户档案管理' },
+    { key: 'ai_analysis', label: 'AI分析', desc: '提交报告、AI分析报告' },
+    { key: 'menstrual_chat', label: '月经助手', desc: '产品搭配、问答查询' },
+    { key: 'short_video', label: '短视频助手', desc: '选题、脚本、内容创作' },
+    { key: 'learning_center', label: '学习中心', desc: '学习资源观看' },
+  ];
+
+  const openPermDialog = (store: StoreItem) => {
+    setPermStore(store);
+    let perms: string[] = [];
+    if (store.storeUser?.permissions) {
+      try {
+        perms = JSON.parse(store.storeUser.permissions);
+      } catch {
+        perms = [];
+      }
+    }
+    setPermList(perms);
+    setIsPermOpen(true);
+  };
+
+  const togglePerm = (key: string) => {
+    setPermList((prev) =>
+      prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]
+    );
+  };
+
+  const savePermissions = async () => {
+    if (!permStore?.storeUser) return;
+    setPermSaving(true);
+    try {
+      const res = await fetch(`/api/admin/store-users/${permStore.storeUser.id}/permissions`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ permissions: permList }),
+      });
+      if (res.ok) {
+        // 本地更新数据
+        setStores((prev) =>
+          prev.map((s) =>
+            s.id === permStore.id && s.storeUser
+              ? { ...s, storeUser: { ...s.storeUser, permissions: JSON.stringify(permList) } }
+              : s
+          )
+        );
+        setIsPermOpen(false);
+        alert('权限配置已保存');
+      } else {
+        const err = await res.json();
+        alert(err.error || '保存失败');
+      }
+    } catch {
+      alert('保存失败');
+    } finally {
+      setPermSaving(false);
     }
   };
 
@@ -254,238 +340,77 @@ export default function AdminStoresPage() {
           </DialogTrigger>
           <DialogContent className="!max-w-[700px] !w-[95vw]">
             <DialogHeader>
-              <DialogTitle>添加新门店</DialogTitle>
+              <DialogTitle>{editingStore ? '编辑门店' : '添加新门店'}</DialogTitle>
             </DialogHeader>
-            <form onSubmit={handleAddSubmit} className="space-y-5">
-              {/* 门店信息 */}
-              <div className="border rounded-lg p-4">
-                <h3 className="text-sm font-medium text-gray-700 mb-3 flex items-center gap-2">
-                  <Store className="h-4 w-4" />
-                  门店信息
-                </h3>
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="space-y-1.5 col-span-2">
-                    <Label htmlFor="storeName">门店名称 *</Label>
-                    <Input
-                      id="storeName"
-                      value={formData.storeName}
-                      onChange={(e) => setFormData({ ...formData, storeName: e.target.value })}
-                    />
-                    {formErrors.storeName && (
-                      <p className="text-xs text-red-500">{formErrors.storeName}</p>
-                    )}
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label htmlFor="contactPhone">联系电话</Label>
-                    <Input
-                      id="contactPhone"
-                      value={formData.contactPhone}
-                      onChange={(e) => setFormData({ ...formData, contactPhone: e.target.value })}
-                      placeholder="选填，11位手机号"
-                    />
-                    {formErrors.contactPhone && (
-                      <p className="text-xs text-red-500">{formErrors.contactPhone}</p>
-                    )}
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label htmlFor="expirationTime">服务到期时间</Label>
-                    <Input
-                      id="expirationTime"
-                      type="date"
-                      value={formData.expirationTime}
-                      onChange={(e) => setFormData({ ...formData, expirationTime: e.target.value })}
-                    />
-                  </div>
-                  <div className="space-y-1.5 col-span-2">
-                    <Label htmlFor="address">门店地址</Label>
-                    <Input
-                      id="address"
-                      value={formData.address}
-                      onChange={(e) => setFormData({ ...formData, address: e.target.value })}
-                    />
-                  </div>
-                  <div className="space-y-1.5 col-span-2">
-                    <Label htmlFor="description">门店描述</Label>
-                    <Input
-                      id="description"
-                      value={formData.description}
-                      onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* 登录凭据 */}
-              <div className="border rounded-lg p-4">
-                <h3 className="text-sm font-medium text-gray-700 mb-3 flex items-center gap-2">
-                  <Lock className="h-4 w-4" />
-                  登录账号（用于门店员工登录系统）
-                </h3>
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="space-y-1.5 col-span-2">
-                    <Label htmlFor="userPhone">登录手机号 *</Label>
-                    <Input
-                      id="userPhone"
-                      value={formData.userPhone}
-                      onChange={(e) => setFormData({ ...formData, userPhone: e.target.value })}
-                      placeholder="11位手机号，用于登录后台"
-                    />
-                    {formErrors.userPhone && (
-                      <p className="text-xs text-red-500">{formErrors.userPhone}</p>
-                    )}
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label htmlFor="userPassword">初始密码 *</Label>
-                    <Input
-                      id="userPassword"
-                      type="password"
-                      value={formData.userPassword}
-                      onChange={(e) => setFormData({ ...formData, userPassword: e.target.value })}
-                      placeholder="至少6位"
-                    />
-                    {formErrors.userPassword && (
-                      <p className="text-xs text-red-500">{formErrors.userPassword}</p>
-                    )}
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label htmlFor="userName">店长姓名</Label>
-                    <Input
-                      id="userName"
-                      value={formData.userName}
-                      onChange={(e) => setFormData({ ...formData, userName: e.target.value })}
-                      placeholder="可选"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              <div className="flex justify-end gap-3">
-                <Button type="button" variant="outline" onClick={() => setIsAddOpen(false)}>
-                  取消
-                </Button>
-                <Button type="submit">创建门店</Button>
-              </div>
-            </form>
-          </DialogContent>
-        </Dialog>
-
-        {/* 编辑弹窗 */}
-        <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
-          <DialogContent className="!max-w-[700px] !w-[95vw]">
-            <DialogHeader>
-              <DialogTitle>编辑门店</DialogTitle>
-            </DialogHeader>
-            <form onSubmit={handleEditSubmit} className="space-y-5">
-              {/* 门店信息 */}
-              <div className="border rounded-lg p-4">
-                <h3 className="text-sm font-medium text-gray-700 mb-3 flex items-center gap-2">
-                  <Store className="h-4 w-4" />
-                  门店信息
-                </h3>
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="space-y-1.5 col-span-2">
-                    <Label htmlFor="editStoreName">门店名称 *</Label>
-                    <Input
-                      id="editStoreName"
-                      value={formData.storeName}
-                      onChange={(e) => setFormData({ ...formData, storeName: e.target.value })}
-                    />
-                    {formErrors.storeName && (
-                      <p className="text-xs text-red-500">{formErrors.storeName}</p>
-                    )}
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label htmlFor="editContactPhone">联系电话</Label>
-                    <Input
-                      id="editContactPhone"
-                      value={formData.contactPhone}
-                      onChange={(e) => setFormData({ ...formData, contactPhone: e.target.value })}
-                      placeholder="选填，11位手机号"
-                    />
-                    {formErrors.contactPhone && (
-                      <p className="text-xs text-red-500">{formErrors.contactPhone}</p>
-                    )}
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label htmlFor="editExpirationTime">服务到期时间</Label>
-                    <Input
-                      id="editExpirationTime"
-                      type="date"
-                      value={formData.expirationTime}
-                      onChange={(e) => setFormData({ ...formData, expirationTime: e.target.value })}
-                    />
-                  </div>
-                  <div className="space-y-1.5 col-span-2">
-                    <Label htmlFor="editAddress">门店地址</Label>
-                    <Input
-                      id="editAddress"
-                      value={formData.address}
-                      onChange={(e) => setFormData({ ...formData, address: e.target.value })}
-                    />
-                  </div>
-                  <div className="space-y-1.5 col-span-2">
-                    <Label htmlFor="editDescription">门店描述</Label>
-                    <Input
-                      id="editDescription"
-                      value={formData.description}
-                      onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* 登录凭据 */}
-              <div className="border rounded-lg p-4">
-                <h3 className="text-sm font-medium text-gray-700 mb-3 flex items-center gap-2">
-                  <Lock className="h-4 w-4" />
-                  登录账号
-                </h3>
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="space-y-1.5 col-span-2">
-                    <Label htmlFor="editUserPhone">登录手机号</Label>
-                    <Input
-                      id="editUserPhone"
-                      value={formData.userPhone}
-                      onChange={(e) => setFormData({ ...formData, userPhone: e.target.value })}
-                    />
-                    {formErrors.userPhone && (
-                      <p className="text-xs text-red-500">{formErrors.userPhone}</p>
-                    )}
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label htmlFor="editUserPassword">新密码</Label>
-                    <Input
-                      id="editUserPassword"
-                      type="password"
-                      value={formData.userPassword}
-                      onChange={(e) => setFormData({ ...formData, userPassword: e.target.value })}
-                      placeholder="留空则不修改"
-                    />
-                    {formErrors.userPassword && (
-                      <p className="text-xs text-red-500">{formErrors.userPassword}</p>
-                    )}
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label htmlFor="editUserName">店长姓名</Label>
-                    <Input
-                      id="editUserName"
-                      value={formData.userName}
-                      onChange={(e) => setFormData({ ...formData, userName: e.target.value })}
-                    />
-                  </div>
-                </div>
-              </div>
-
-              <div className="flex justify-end gap-3">
-                <Button type="button" variant="outline" onClick={() => setIsEditOpen(false)}>
-                  取消
-                </Button>
-                <Button type="submit">保存</Button>
-              </div>
-            </form>
+            <StoreForm
+              mode={editingStore ? 'edit' : 'add'}
+              formData={formData}
+              formErrors={formErrors}
+              onFormChange={setFormData}
+              onSubmit={editingStore ? handleEditSubmit : handleAddSubmit}
+              onCancel={() => {
+                setIsAddOpen(false);
+                setEditingStore(null);
+                resetForm();
+              }}
+            />
           </DialogContent>
         </Dialog>
       </div>
+
+        {/* 权限配置弹窗 */}
+        <Dialog open={isPermOpen} onOpenChange={setIsPermOpen}>
+          <DialogContent className="!max-w-[520px] !w-[95vw]">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <Settings className="h-5 w-5 text-purple-600" />
+                权限配置
+              </DialogTitle>
+            </DialogHeader>
+            <div className="space-y-3 py-2">
+              <p className="text-sm text-gray-500">
+                门店：<span className="font-medium text-gray-700">{permStore?.storeName}</span>
+              </p>
+              <div className="space-y-2">
+                {PERM_OPTIONS.map((opt) => {
+                  const checked = permList.includes(opt.key);
+                  return (
+                    <label
+                      key={opt.key}
+                      className={`flex items-start gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${
+                        checked
+                          ? 'border-purple-300 bg-purple-50'
+                          : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
+                      }`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={() => togglePerm(opt.key)}
+                        className="mt-0.5 accent-purple-600"
+                      />
+                      <div className="flex-1 min-w-0">
+                        <div className="text-sm font-medium text-gray-800">{opt.label}</div>
+                        <div className="text-xs text-gray-500 mt-0.5">{opt.desc}</div>
+                      </div>
+                    </label>
+                  );
+                })}
+              </div>
+              <p className="text-xs text-gray-400 pt-1">
+                已选 {permList.length} / {PERM_OPTIONS.length} 项功能
+              </p>
+            </div>
+            <div className="flex justify-end gap-2 pt-2">
+              <Button variant="outline" onClick={() => setIsPermOpen(false)}>
+                取消
+              </Button>
+              <Button onClick={savePermissions} disabled={permSaving}>
+                {permSaving ? '保存中...' : '保存配置'}
+              </Button>
+            </div>
+          </DialogContent>
+        </Dialog>
 
       {/* 搜索栏 */}
       <div className="flex items-center gap-4">
@@ -558,6 +483,20 @@ export default function AdminStoresPage() {
                           className="text-sm text-gray-600 hover:text-gray-900"
                         >
                           设置
+                        </button>
+                        <button
+                          onClick={() => openPermDialog(store)}
+                          className="text-sm text-purple-600 hover:text-purple-700"
+                          title="配置功能权限"
+                        >
+                          权限配置
+                        </button>
+                        <button
+                          onClick={() => handleResetPassword(store)}
+                          className="text-sm text-blue-600 hover:text-blue-700"
+                          title="重置登录密码"
+                        >
+                          重置密码
                         </button>
                         <button
                           onClick={() => handleDelete(store.id)}

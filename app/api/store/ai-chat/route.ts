@@ -11,12 +11,18 @@ type ChatMessage = {
   content: string;
 };
 
+interface AIRequestConfig {
+  apiUrl: string;
+  apiKey: string;
+  modelId: string;
+  messages: any[];
+}
+
 export async function POST(request: Request) {
   try {
     const body = await request.json();
     const { customerId, storeId, messages, reportContent, stream, promptType } = body;
     const type = promptType || 'plan';
-    console.log(`[AI-Chat] 使用提示词类型: ${type}`);
 
     if (!customerId || !messages || messages.length === 0) {
       return NextResponse.json(
@@ -140,59 +146,60 @@ function buildProviderMessages(systemPrompt: string | null | undefined, messages
 
 async function getAnalysisPrompt(type: string = 'plan'): Promise<string> {
   const prompt = await getPromptByType(type);
-  console.log(`[AI-Chat] 获取到的 ${type} 提示词:`, prompt ? `${prompt.substring(0, 100)}...` : 'null/empty');
   return prompt || DEFAULT_SYSTEM_PROMPT;
 }
 
 async function getKnowledgeContext(userMessage: string): Promise<string> {
   try {
     const matches = await searchKnowledgeByEmbedding(userMessage, 'default', 5, 0.5);
-    
-    if (matches.length > 0) {
-      console.log(`[AI-Chat] 向量检索找到 ${matches.length} 条相关知识`);
-      return formatKnowledgeContext(matches);
-    }
-    
-    console.log('[AI-Chat] 向量检索未找到匹配知识');
-    return '';
-  } catch (error) {
-    console.error('[AI-Chat] 向量检索失败:', error);
+    return matches.length > 0 ? formatKnowledgeContext(matches) : '';
+  } catch {
     return '';
   }
 }
 
-async function* streamAIReply(messages: ChatMessage[], type: string = 'plan'): AsyncGenerator<string> {
+async function buildAIRequest(messages: ChatMessage[], type: string): Promise<AIRequestConfig | null> {
   const settings = await prisma.aiSettings.findFirst({
     orderBy: { createdAt: 'desc' },
   });
 
   if (!settings?.apiKey || !settings?.baseUrl || !settings?.modelId) {
+    return null;
+  }
+
+  const apiUrl = `${settings.baseUrl.replace(/\/$/, '')}/chat/completions`;
+  const systemPrompt = await getAnalysisPrompt(type);
+  const userMessage = messages[messages.length - 1]?.content || '';
+  const knowledgeContext = await getKnowledgeContext(userMessage);
+  const finalMessages = buildProviderMessages(systemPrompt, messages, knowledgeContext);
+
+  return {
+    apiUrl,
+    apiKey: settings.apiKey,
+    modelId: settings.modelId,
+    messages: finalMessages,
+  };
+}
+
+async function* streamAIReply(messages: ChatMessage[], type: string = 'plan'): AsyncGenerator<string> {
+  const config = await buildAIRequest(messages, type);
+  
+  if (!config) {
     yield* streamText(generateFallbackReply(messages));
     return;
   }
 
   try {
-    const apiUrl = `${settings.baseUrl.replace(/\/$/, '')}/chat/completions`;
-    const systemPrompt = await getAnalysisPrompt(type);
-    
-    // 获取用户最新的消息进行向量检索
-    const userMessage = messages[messages.length - 1]?.content || '';
-    const knowledgeContext = await getKnowledgeContext(userMessage);
-    
-    console.log(`[AI-Chat] 发送 ${messages.length} 条历史消息 + 1 条 system prompt`);
-    const finalMessages = buildProviderMessages(systemPrompt, messages, knowledgeContext);
-    console.log(`[AI-Chat] 最终发送 ${finalMessages.length} 条消息 (含 system)`);
-    console.log(`[AI-Chat] 知识上下文长度: ${knowledgeContext.length} 字符`);
-    const response = await fetch(apiUrl, {
+    const response = await fetch(config.apiUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        Authorization: `Bearer ${settings.apiKey}`,
+        Authorization: `Bearer ${config.apiKey}`,
       },
       body: JSON.stringify({
-        model: settings.modelId,
+        model: config.modelId,
         stream: true,
-        messages: finalMessages,
+        messages: config.messages,
         temperature: 0.7,
       }),
     });
@@ -232,8 +239,7 @@ async function* streamAIReply(messages: ChatMessage[], type: string = 'plan'): A
         }
       }
     }
-  } catch (error) {
-    console.error('AI provider stream failed, using fallback stream:', error);
+  } catch {
     yield* streamText(generateFallbackReply(messages));
   }
 }
@@ -247,36 +253,22 @@ async function* streamText(text: string): AsyncGenerator<string> {
 }
 
 async function generateAIReply(messages: ChatMessage[], type: string = 'plan'): Promise<string> {
-  const settings = await prisma.aiSettings.findFirst({
-    orderBy: { createdAt: 'desc' },
-  });
-
-  if (!settings?.apiKey || !settings?.baseUrl || !settings?.modelId) {
+  const config = await buildAIRequest(messages, type);
+  
+  if (!config) {
     return generateFallbackReply(messages);
   }
 
   try {
-    const apiUrl = `${settings.baseUrl.replace(/\/$/, '')}/chat/completions`;
-    const systemPrompt = await getAnalysisPrompt(type);
-    
-    // 获取用户最新的消息进行向量检索
-    const userMessage = messages[messages.length - 1]?.content || '';
-    const knowledgeContext = await getKnowledgeContext(userMessage);
-    
-    console.log(`[AI-Chat] 发送 ${messages.length} 条历史消息 + 1 条 system prompt`);
-    const finalMessages = buildProviderMessages(systemPrompt, messages, knowledgeContext);
-    console.log(`[AI-Chat] 最终发送 ${finalMessages.length} 条消息 (含 system)`);
-    console.log(`[AI-Chat] 知识上下文长度: ${knowledgeContext.length} 字符`);
-    
-    const response = await fetch(apiUrl, {
+    const response = await fetch(config.apiUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        Authorization: `Bearer ${settings.apiKey}`,
+        Authorization: `Bearer ${config.apiKey}`,
       },
       body: JSON.stringify({
-        model: settings.modelId,
-        messages: finalMessages,
+        model: config.modelId,
+        messages: config.messages,
         temperature: 0.7,
       }),
     });
@@ -288,8 +280,7 @@ async function generateAIReply(messages: ChatMessage[], type: string = 'plan'): 
 
     const data = await response.json();
     return data?.choices?.[0]?.message?.content || generateFallbackReply(messages);
-  } catch (error) {
-    console.error('AI provider request failed, using fallback reply:', error);
+  } catch {
     return generateFallbackReply(messages);
   }
 }

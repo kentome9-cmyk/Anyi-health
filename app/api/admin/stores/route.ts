@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import bcrypt from 'bcryptjs';
+import { ALL_STORE_PERMISSIONS } from '@/lib/store-permissions';
 
 // 手机号格式验证：中国大陆11位手机号
 const isValidPhone = (phone: string): boolean => {
@@ -26,7 +27,7 @@ export async function GET(request: Request) {
         orderBy: { createdAt: 'desc' },
         include: {
           storeUser: {
-            select: { id: true, phone: true, name: true },
+            select: { id: true, phone: true, name: true, permissions: true },
           },
           _count: {
             select: { customers: true, plans: true },
@@ -136,13 +137,14 @@ export async function POST(request: Request) {
         );
       }
 
-      // 创建新的StoreUser
+      // 创建新的StoreUser（管理员创建时默认全权限）
       const hashedPassword = await bcrypt.hash(userPassword, 10);
       const newUser = await prisma.storeUser.create({
         data: {
           phone: userPhone,
           password: hashedPassword,
           name: userName || null,
+          permissions: JSON.stringify(ALL_STORE_PERMISSIONS),
         },
       });
 

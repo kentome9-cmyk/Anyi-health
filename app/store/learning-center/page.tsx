@@ -3,30 +3,16 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/stores/auth.store';
-import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table';
 import {
   Search,
   FileText,
   Presentation,
   ExternalLink,
   Loader2,
+  ChevronDown,
+  ChevronRight,
 } from '@/lib/icons';
 
 interface LearningResource {
@@ -46,7 +32,6 @@ interface LearningResource {
 }
 
 const CATEGORIES = [
-  { value: 'all', label: '全部分类' },
   { value: '培训课程', label: '培训课程' },
   { value: '产品知识', label: '产品知识' },
   { value: '营销技巧', label: '营销技巧' },
@@ -57,7 +42,7 @@ const CATEGORIES = [
 
 const TYPE_LABELS: Record<string, string> = {
   md: 'MD文档',
-  ppt: 'PPT/PDF',
+  ppt: 'PDF/PPT',
 };
 
 function truncate(text: string | null, len: number): string {
@@ -74,15 +59,12 @@ function formatDate(dateStr: string | null): string {
 
 export default function StoreLearningCenterPage() {
   const router = useRouter();
-  const { storeId, userType, isAuthenticated, _hasHydrated } = useAuthStore();
+  const { userType, isAuthenticated, _hasHydrated } = useAuthStore();
   const [resources, setResources] = useState<LearningResource[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchKeyword, setSearchKeyword] = useState('');
   const [searchInput, setSearchInput] = useState('');
-  const [filterType, setFilterType] = useState('all');
-  const [filterCategory, setFilterCategory] = useState('all');
-  const [currentPage, setCurrentPage] = useState(1);
-  const pageSize = 10;
+  const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     if (!_hasHydrated) return;
@@ -100,32 +82,10 @@ export default function StoreLearningCenterPage() {
     loadResources();
   }, []);
 
-  useEffect(() => {
-    if (searchInput === '' && searchKeyword !== '') {
-      setSearchKeyword('');
-      setCurrentPage(1);
-    }
-  }, [searchInput]);
-
-  const loadResources = async (overrideKeyword?: string) => {
+  const loadResources = async () => {
     try {
       setLoading(true);
-      let url = '/api/store/learning-resources';
-      const params: string[] = [];
-      const keyword = overrideKeyword !== undefined ? overrideKeyword : searchKeyword;
-      if (keyword.trim()) {
-        params.push(`keyword=${encodeURIComponent(keyword.trim())}`);
-      }
-      if (filterType && filterType !== 'all') {
-        params.push(`type=${filterType}`);
-      }
-      if (filterCategory && filterCategory !== 'all') {
-        params.push(`category=${encodeURIComponent(filterCategory)}`);
-      }
-      if (params.length > 0) {
-        url += '?' + params.join('&');
-      }
-      const res = await fetch(url);
+      const res = await fetch('/api/store/learning-resources');
       const data = await res.json();
       const list = Array.isArray(data) ? data : data.list || [];
       setResources(list);
@@ -136,259 +96,231 @@ export default function StoreLearningCenterPage() {
     }
   };
 
-  useEffect(() => {
-    setCurrentPage(1);
-    loadResources();
-  }, [filterType, filterCategory]);
+  const groupedResources = useMemo(() => {
+    const grouped: Record<string, LearningResource[]> = {};
+    CATEGORIES.forEach((cat) => {
+      grouped[cat.value] = [];
+    });
 
-  const handleSearch = () => {
-    setSearchKeyword(searchInput.trim());
-    setCurrentPage(1);
-    loadResources(searchInput.trim());
+    const filtered = searchKeyword.trim()
+      ? resources.filter((r) => {
+          const kw = searchKeyword.toLowerCase();
+          return (
+            (r.title || '').toLowerCase().includes(kw) ||
+            (r.description || '').toLowerCase().includes(kw) ||
+            (r.category || '').toLowerCase().includes(kw)
+          );
+        })
+      : resources;
+
+    filtered.forEach((r) => {
+      const cat = r.category || '其他';
+      if (!grouped[cat]) {
+        grouped[cat] = [];
+      }
+      grouped[cat].push(r);
+    });
+
+    Object.keys(grouped).forEach((key) => {
+      grouped[key].sort((a, b) => {
+        if (a.sortOrder !== b.sortOrder) return a.sortOrder - b.sortOrder;
+        return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+      });
+    });
+
+    return grouped;
+  }, [resources, searchKeyword]);
+
+  useEffect(() => {
+    if (searchKeyword.trim()) {
+      const newExpanded = new Set<string>();
+      Object.keys(groupedResources).forEach((cat) => {
+        if (groupedResources[cat].length > 0) {
+          newExpanded.add(cat);
+        }
+      });
+      setExpandedCategories(newExpanded);
+    }
+  }, [searchKeyword]);
+
+  const toggleCategory = (category: string) => {
+    setExpandedCategories((prev) => {
+      const newSet = new Set(prev);
+      if (newSet.has(category)) {
+        newSet.delete(category);
+      } else {
+        newSet.add(category);
+      }
+      return newSet;
+    });
   };
 
+  const handleSearch = () => setSearchKeyword(searchInput.trim());
   const handleReset = () => {
     setSearchInput('');
     setSearchKeyword('');
-    setFilterType('all');
-    setFilterCategory('all');
-    setCurrentPage(1);
-    setTimeout(() => loadResources(''), 0);
   };
 
   const handleView = (resource: LearningResource) => {
     router.push(`/store/learning-center/${resource.id}`);
   };
 
-  const filteredResources = useMemo(() => {
-    if (!searchKeyword.trim() && filterType === 'all' && filterCategory === 'all') return resources;
-    const kw = searchKeyword.trim().toLowerCase();
-    return resources.filter((r) => {
-      const matchesKeyword = !kw ||
-        (r.title || '').toLowerCase().includes(kw) ||
-        (r.description || '').toLowerCase().includes(kw);
-      const matchesType = filterType === 'all' || r.type === filterType;
-      const matchesCategory = filterCategory === 'all' || r.category === filterCategory;
-      return matchesKeyword && matchesType && matchesCategory;
-    });
-  }, [resources, searchKeyword, filterType, filterCategory]);
-
-  const pagedResources = useMemo(() => {
-    const start = (currentPage - 1) * pageSize;
-    return filteredResources.slice(start, start + pageSize);
-  }, [filteredResources, currentPage]);
-
-  const totalPages = Math.max(1, Math.ceil(filteredResources.length / pageSize));
+  const totalCount = resources.length;
+  const visibleCount = Object.values(groupedResources).reduce((sum, arr) => sum + arr.length, 0);
 
   return (
-    <div className="flex-1 overflow-y-auto bg-gray-50">
-      <div className="p-4 md:p-6">
-        <div className="flex flex-col md:flex-row md:justify-between md:items-center gap-3 md:gap-4">
+    <div className="flex-1 overflow-y-auto bg-slate-50">
+      <div className="p-4 md:p-6 max-w-7xl mx-auto w-full">
+        {/* 顶部：标题 + 搜索 */}
+        <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-4 mb-6">
           <div>
-            <h1 className="text-xl md:text-2xl font-bold text-gray-900">学习中心</h1>
-            <p className="text-sm text-gray-500 mt-0.5 md:mt-1">
-              门店培训资料，包含产品知识、营销技巧等学习内容
+            <h1 className="text-2xl font-semibold text-slate-900">学习中心</h1>
+            <p className="text-sm text-slate-500 mt-1">
+              按分类浏览门店学习资源
+              {!loading && (
+                <span className="ml-2 text-slate-400">· 共 {totalCount} 份</span>
+              )}
             </p>
           </div>
-          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-3">
-            <div className="relative flex-1 sm:flex-initial">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+          <div className="flex items-center gap-2">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
               <Input
-                placeholder="搜索资源标题或描述..."
+                placeholder="搜索资源..."
                 value={searchInput}
                 onChange={(e) => setSearchInput(e.target.value)}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter') handleSearch();
                 }}
-                className="pl-9 w-full sm:w-56"
+                className="pl-9 w-64 h-9 bg-white"
               />
             </div>
-            <Select value={filterType} onValueChange={setFilterType}>
-              <SelectTrigger className="w-full sm:w-[140px]">
-                <SelectValue placeholder="资源类型" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">全部类型</SelectItem>
-                <SelectItem value="md">MD文档</SelectItem>
-                <SelectItem value="ppt">PPT/PDF</SelectItem>
-              </SelectContent>
-            </Select>
-            <Select value={filterCategory} onValueChange={setFilterCategory}>
-              <SelectTrigger className="w-full sm:w-[140px]">
-                <SelectValue placeholder="分类" />
-              </SelectTrigger>
-              <SelectContent>
-                {CATEGORIES.map((cat) => (
-                  <SelectItem key={cat.value} value={cat.value}>
-                    {cat.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Button variant="outline" onClick={handleSearch} className="w-full sm:w-auto">
+            <Button
+              onClick={handleSearch}
+              className="h-9 bg-emerald-700 hover:bg-emerald-800 text-white"
+            >
               搜索
             </Button>
-            <Button variant="outline" onClick={handleReset} className="w-full sm:w-auto">
+            <Button
+              variant="outline"
+              onClick={handleReset}
+              className="h-9 border-slate-200"
+            >
               重置
             </Button>
           </div>
         </div>
-      </div>
 
-      <div className="hidden md:block px-6 pb-6">
-        <Card>
-          <CardContent className="p-0">
-            {loading ? (
-              <div className="flex items-center justify-center py-12">
-                <Loader2 className="h-8 w-8 animate-spin text-gray-400" />
-              </div>
-            ) : pagedResources.length === 0 ? (
-              <div className="py-12 text-center text-gray-500">
-                {searchKeyword || filterType !== 'all' || filterCategory !== 'all' ? '未找到匹配的学习资源' : '暂无学习资源'}
-              </div>
-            ) : (
-              <>
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead className="w-[10%] text-center">类型</TableHead>
-                      <TableHead className="w-[30%]">标题</TableHead>
-                      <TableHead className="w-[12%] text-center">分类</TableHead>
-                      <TableHead className="w-[25%]">描述</TableHead>
-                      <TableHead className="w-[13%] text-center">文件信息</TableHead>
-                      <TableHead className="w-[10%] text-center">操作</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {pagedResources.map((resource) => (
-                      <TableRow key={resource.id} className="hover:bg-gray-50">
-                        <TableCell className="text-center">
-                          <div className="flex items-center justify-center gap-1.5">
-                            {resource.type === 'md' ? (
-                              <FileText className="h-4 w-4 text-blue-500" />
-                            ) : (
-                              <Presentation className="h-4 w-4 text-orange-500" />
-                            )}
-                            <span className="text-xs text-gray-600">{TYPE_LABELS[resource.type]}</span>
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <div className="font-medium text-gray-900" title={resource.title}>
-                            {resource.title}
-                          </div>
-                        </TableCell>
-                        <TableCell className="text-center">
-                          <span className="text-sm text-gray-600">{resource.category}</span>
-                        </TableCell>
-                        <TableCell>
-                          <span className="text-sm text-gray-500" title={resource.description || ''}>
-                            {truncate(resource.description, 40)}
-                          </span>
-                        </TableCell>
-                        <TableCell className="text-center">
-                          <div className="text-xs text-gray-500 space-y-0.5">
-                            {resource.fileSize && <div>{resource.fileSize}</div>}
-                            {resource.pageCount && <div>{resource.pageCount} 页</div>}
-                            <div>{formatDate(resource.createdAt)}</div>
-                          </div>
-                        </TableCell>
-                        <TableCell className="text-center">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => handleView(resource)}
-                            className="text-green-600 hover:text-green-700"
-                          >
-                            <ExternalLink className="h-4 w-4 mr-1" />
-                            查看
-                          </Button>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-                {totalPages > 1 && (
-                  <div className="flex items-center justify-between px-4 py-3 border-t">
-                    <div className="text-sm text-gray-500">
-                      共 {filteredResources.length} 条 · 第 {currentPage} / {totalPages} 页
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        disabled={currentPage <= 1}
-                        onClick={() => setCurrentPage(currentPage - 1)}
-                      >
-                        上一页
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        disabled={currentPage >= totalPages}
-                        onClick={() => setCurrentPage(currentPage + 1)}
-                      >
-                        下一页
-                      </Button>
-                    </div>
-                  </div>
-                )}
-              </>
-            )}
-          </CardContent>
-        </Card>
-      </div>
-
-      <div className="md:hidden px-4 pb-6 space-y-3">
         {loading ? (
-          <div className="flex items-center justify-center py-12">
-            <Loader2 className="h-8 w-8 animate-spin text-gray-400" />
+          <div className="flex items-center justify-center py-20 bg-white rounded-lg border border-slate-200">
+            <Loader2 className="h-8 w-8 animate-spin text-slate-400" />
           </div>
-        ) : pagedResources.length === 0 ? (
-          <div className="py-12 text-center text-gray-500">
-            {searchKeyword || filterType !== 'all' || filterCategory !== 'all' ? '未找到匹配的学习资源' : '暂无学习资源'}
+        ) : visibleCount === 0 ? (
+          <div className="bg-white rounded-lg border border-slate-200 py-20 text-center text-slate-500">
+            {searchKeyword.trim() ? '未找到匹配的学习资源' : '暂无学习资源'}
           </div>
         ) : (
-          pagedResources.map((resource) => (
-            <Card key={resource.id}>
-              <CardContent className="p-4">
-                <div className="flex items-start gap-3">
-                  <div className={`p-2 rounded-lg shrink-0 ${resource.type === 'md' ? 'bg-blue-50' : 'bg-orange-50'}`}>
-                    {resource.type === 'md' ? (
-                      <FileText className="h-5 w-5 text-blue-600" />
-                    ) : (
-                      <Presentation className="h-5 w-5 text-orange-600" />
-                    )}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <h3 className="font-medium text-gray-900 text-sm truncate flex-1" title={resource.title}>
-                        {resource.title}
-                      </h3>
+          <div className="space-y-3">
+            {CATEGORIES.map((category) => {
+              const items = groupedResources[category.value] || [];
+              if (items.length === 0) return null;
+
+              const isExpanded = expandedCategories.has(category.value) || searchKeyword.trim() !== '';
+
+              return (
+                <div
+                  key={category.value}
+                  className="bg-white rounded-lg border border-slate-200 shadow-sm overflow-hidden"
+                >
+                  {/* 分类标题 */}
+                  <button
+                    onClick={() => toggleCategory(category.value)}
+                    className="w-full flex items-center justify-between px-5 py-3.5 hover:bg-slate-50 transition-colors"
+                  >
+                    <div className="flex items-center gap-2.5">
+                      {isExpanded ? (
+                        <ChevronDown className="h-4 w-4 text-slate-500" />
+                      ) : (
+                        <ChevronRight className="h-4 w-4 text-slate-500" />
+                      )}
+                      <h2 className="text-base font-semibold text-slate-900">
+                        {category.label}
+                      </h2>
+                      <span className="text-sm text-slate-500">（{items.length}）</span>
                     </div>
-                    <p className="text-xs text-gray-500 mt-1 line-clamp-2" title={resource.description || ''}>
-                      {truncate(resource.description, 60)}
-                    </p>
-                    <div className="flex items-center justify-between mt-2">
-                      <div className="flex items-center gap-2 text-xs text-gray-400">
-                        <span className="px-1.5 py-0.5 bg-gray-100 rounded">{resource.category}</span>
-                        <span>{TYPE_LABELS[resource.type]}</span>
-                        {resource.fileSize && <span>· {resource.fileSize}</span>}
-                      </div>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleView(resource)}
-                        className="text-green-600 hover:text-green-700 h-7 px-2"
-                      >
-                        <ExternalLink className="h-3.5 w-3.5 mr-1" />
-                        查看
-                      </Button>
+                  </button>
+
+                  {/* 表格 */}
+                  {isExpanded && (
+                    <div className="border-t border-slate-200">
+                      <table className="w-full text-sm">
+                        <thead>
+                          <tr className="bg-slate-50/80 text-slate-500 border-b border-slate-200">
+                            <th className="text-left font-medium px-5 py-2.5 w-[12%]">类型</th>
+                            <th className="text-left font-medium px-3 py-2.5 w-[28%]">标题</th>
+                            <th className="text-left font-medium px-3 py-2.5 w-[30%]">描述</th>
+                            <th className="text-left font-medium px-3 py-2.5 w-[18%]">文件信息</th>
+                            <th className="text-center font-medium px-3 py-2.5 w-[12%]">操作</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {items.map((resource, idx) => (
+                            <tr
+                              key={resource.id}
+                              className={`border-b border-slate-100 hover:bg-slate-50/50 transition-colors ${
+                                idx === items.length - 1 ? 'border-b-0' : ''
+                              }`}
+                            >
+                              <td className="px-5 py-3">
+                                <div className="flex items-center gap-1.5">
+                                  {resource.type === 'md' ? (
+                                    <FileText className="h-4 w-4 text-emerald-600" />
+                                  ) : (
+                                    <Presentation className="h-4 w-4 text-amber-600" />
+                                  )}
+                                  <span className="text-xs text-slate-600">
+                                    {TYPE_LABELS[resource.type]}
+                                  </span>
+                                </div>
+                              </td>
+                              <td className="px-3 py-3">
+                                <div className="font-medium text-slate-900" title={resource.title}>
+                                  {resource.title}
+                                </div>
+                              </td>
+                              <td className="px-3 py-3">
+                                <span className="text-slate-500" title={resource.description || ''}>
+                                  {truncate(resource.description, 50)}
+                                </span>
+                              </td>
+                              <td className="px-3 py-3">
+                                <div className="text-xs text-slate-500 space-y-0.5">
+                                  {resource.fileSize && <div>{resource.fileSize}</div>}
+                                  {resource.pageCount && <div>{resource.pageCount} 页</div>}
+                                  <div className="text-slate-400">{formatDate(resource.createdAt)}</div>
+                                </div>
+                              </td>
+                              <td className="px-3 py-3 text-center">
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => handleView(resource)}
+                                  className="h-7 px-2 text-emerald-700 hover:text-emerald-800 hover:bg-emerald-50"
+                                >
+                                  <ExternalLink className="h-3.5 w-3.5 mr-1" />
+                                  查看
+                                </Button>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
                     </div>
-                  </div>
+                  )}
                 </div>
-              </CardContent>
-            </Card>
-          ))
+              );
+            })}
+          </div>
         )}
       </div>
     </div>

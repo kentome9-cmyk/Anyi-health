@@ -13,18 +13,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Loader2, Sparkles, Copy, CheckCheck, Play, FileText, Lock, Link, Pencil, Check, Wand2, Library, Search, ChevronRight, Lightbulb, Save } from '@/lib/icons';
 import { useAuthStore } from '@/stores/auth.store';
 import NextLink from 'next/link';
-
-interface CreatorIdentity {
-  id: string;
-  storeId: string;
-  contentTrack: string;
-  personaStyle: string;
-  targetAudience: string;
-  videoTone: string;
-  videoDuration: string;
-  createdAt: string;
-  updatedAt: string;
-}
+import { extractScriptMetadata, ScriptMetadata } from '@/lib/script-utils';
+import { useCreatorIdentity } from '@/hooks/use-creator-identity';
 
 interface Topic {
   id: string;
@@ -58,12 +48,9 @@ interface ScriptRecord {
 
 export default function StoreAIContentPage() {
   const { storeId } = useAuthStore();
+  const { identity, loading: loadingIdentity } = useCreatorIdentity();
   const searchParams = useSearchParams();
   const [activeTab, setActiveTab] = useState('original');
-
-  // 创作者身份
-  const [identity, setIdentity] = useState<CreatorIdentity | null>(null);
-  const [loadingIdentity, setLoadingIdentity] = useState(true);
 
   // 路径一：原创创作
   const [topics, setTopics] = useState<Topic[]>([]);
@@ -93,22 +80,6 @@ export default function StoreAIContentPage() {
   const [savingScript, setSavingScript] = useState(false);
   const [savedScriptId, setSavedScriptId] = useState<string | null>(null);
 
-  // 加载创作者身份
-  const loadIdentity = async () => {
-    try {
-      setLoadingIdentity(true);
-      const res = await fetch(`/api/store/creator-identity?storeId=${storeId}`);
-      const data = await res.json();
-      if (data.identity) {
-        setIdentity(data.identity);
-      }
-    } catch (error) {
-      console.error('Failed to load identity:', error);
-    } finally {
-      setLoadingIdentity(false);
-    }
-  };
-
   // 加载模板列表
   const loadTemplates = async (type: string) => {
     try {
@@ -136,8 +107,6 @@ export default function StoreAIContentPage() {
   const [currentTopicId, setCurrentTopicId] = useState<string | null>(null);
 
   useEffect(() => {
-    loadIdentity();
-    // 默认加载文案创作模板
     loadTemplates('script');
   }, []);
 
@@ -204,42 +173,31 @@ export default function StoreAIContentPage() {
     setTopics(prev => prev.map(t => ({ ...t, selected: t.id === topic.id })));
   };
 
-  // 渲染脚本内容（支持JSON和纯文本格式）
   const renderScriptContent = (content: string) => {
-    // 尝试解析JSON
-    try {
-      // 去除可能的markdown代码块标记（支持3个或更多反引号）
-      let jsonStr = content;
-      if (content.includes('```json')) {
-        jsonStr = content.replace(/```json\n?/g, '').replace(/```+\n?/g, '').trim();
-      } else if (content.includes('```')) {
-        jsonStr = content.replace(/```+\n?/g, '').trim();
-      }
-      
-      const json = JSON.parse(jsonStr);
-      
-      // 如果解析成功，以格式化方式显示
+    const metadata: ScriptMetadata = extractScriptMetadata(content);
+    
+    if (metadata.script || metadata.titleSuggestion || metadata.hashtags.length > 0) {
       return (
         <div className="space-y-3">
-          {json.titleSuggestion && (
+          {metadata.titleSuggestion && (
             <div className="bg-red-50 border border-red-100 rounded p-2">
               <div className="text-[10px] font-medium text-red-600 mb-1">推荐标题</div>
-              <div className="text-xs text-red-800 font-medium">{json.titleSuggestion}</div>
+              <div className="text-xs text-red-800 font-medium">{metadata.titleSuggestion}</div>
             </div>
           )}
           
-          {(json.script || json.rewrittenScript) && (
+          {metadata.script && (
             <div className="bg-gray-900 text-gray-100 rounded p-3">
               <div className="text-[10px] text-gray-400 mb-1">口播文案</div>
-              <div className="text-xs leading-5 whitespace-pre-wrap">{json.script || json.rewrittenScript}</div>
+              <div className="text-xs leading-5 whitespace-pre-wrap">{metadata.script}</div>
             </div>
           )}
           
-          {json.shootingTips && Array.isArray(json.shootingTips) && json.shootingTips.length > 0 && (
+          {metadata.shootingTips.length > 0 && (
             <div className="bg-blue-50 border border-blue-100 rounded p-2">
               <div className="text-[10px] font-medium text-blue-600 mb-1">拍摄要点</div>
               <ul className="text-xs text-gray-700 space-y-1">
-                {json.shootingTips.map((tip: string, idx: number) => (
+                {metadata.shootingTips.map((tip: string, idx: number) => (
                   <li key={idx} className="flex items-start gap-1">
                     <span className="text-blue-500 shrink-0">{idx + 1}.</span>
                     <span>{tip}</span>
@@ -249,11 +207,11 @@ export default function StoreAIContentPage() {
             </div>
           )}
           
-          {json.editingTips && Array.isArray(json.editingTips) && json.editingTips.length > 0 && (
+          {metadata.editingTips.length > 0 && (
             <div className="bg-purple-50 border border-purple-100 rounded p-2">
               <div className="text-[10px] font-medium text-purple-600 mb-1">剪辑要点</div>
               <ul className="text-xs text-gray-700 space-y-1">
-                {json.editingTips.map((tip: string, idx: number) => (
+                {metadata.editingTips.map((tip: string, idx: number) => (
                   <li key={idx} className="flex items-start gap-1">
                     <span className="text-purple-500 shrink-0">{idx + 1}.</span>
                     <span>{tip}</span>
@@ -263,40 +221,39 @@ export default function StoreAIContentPage() {
             </div>
           )}
           
-          {json.hashtags && Array.isArray(json.hashtags) && json.hashtags.length > 0 && (
+          {metadata.hashtags.length > 0 && (
             <div className="bg-green-50 border border-green-100 rounded p-2">
               <div className="text-[10px] font-medium text-green-600 mb-1">推荐标签</div>
               <div className="flex flex-wrap gap-1">
-                {json.hashtags.map((tag: string, idx: number) => (
+                {metadata.hashtags.map((tag: string, idx: number) => (
                   <span key={idx} className="text-[10px] px-1.5 py-[2px] bg-green-100 text-green-700 rounded">{tag}</span>
                 ))}
               </div>
             </div>
           )}
           
-          {json.userNeeds && (
+          {metadata.userNeeds && (
             <div className="bg-amber-50 border border-amber-100 rounded p-2">
               <div className="text-[10px] font-medium text-amber-600 mb-1">用户需求洞察</div>
               <div className="text-xs text-gray-700 space-y-1">
-                {json.userNeeds.surface && <div><span className="text-amber-600">表层需求：</span>{json.userNeeds.surface}</div>}
-                {json.userNeeds.deep && <div><span className="text-amber-600">深层需求：</span>{json.userNeeds.deep}</div>}
-                {json.userNeeds.coreBenefit && <div><span className="text-amber-600">核心利益：</span>{json.userNeeds.coreBenefit}</div>}
-                {json.userNeeds.emotion && <div><span className="text-amber-600">情绪需求：</span>{json.userNeeds.emotion}</div>}
-                {json.userNeeds.resonance && <div><span className="text-amber-600">共鸣点：</span>{json.userNeeds.resonance}</div>}
-                {json.userNeeds.insight && <div><span className="text-amber-600">核心洞察：</span>{json.userNeeds.insight}</div>}
+                {metadata.userNeeds.surface && <div><span className="text-amber-600">表层需求：</span>{metadata.userNeeds.surface}</div>}
+                {metadata.userNeeds.deep && <div><span className="text-amber-600">深层需求：</span>{metadata.userNeeds.deep}</div>}
+                {metadata.userNeeds.coreBenefit && <div><span className="text-amber-600">核心利益：</span>{metadata.userNeeds.coreBenefit}</div>}
+                {metadata.userNeeds.emotion && <div><span className="text-amber-600">情绪需求：</span>{metadata.userNeeds.emotion}</div>}
+                {metadata.userNeeds.resonance && <div><span className="text-amber-600">共鸣点：</span>{metadata.userNeeds.resonance}</div>}
+                {metadata.userNeeds.insight && <div><span className="text-amber-600">核心洞察：</span>{metadata.userNeeds.insight}</div>}
               </div>
             </div>
           )}
         </div>
       );
-    } catch {
-      // 如果不是JSON，以纯文本方式显示
-      return (
-        <div className="bg-gray-900 text-gray-100 rounded p-3 text-xs leading-5 whitespace-pre-wrap">
-          {content}
-        </div>
-      );
     }
+    
+    return (
+      <div className="bg-gray-900 text-gray-100 rounded p-3 text-xs leading-5 whitespace-pre-wrap">
+        {content}
+      </div>
+    );
   };
 
   // 路径一：生成脚本

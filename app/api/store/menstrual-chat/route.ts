@@ -117,6 +117,7 @@ async function createStreamResponse(message: string, sessionId: string, storeId:
   const readable = new ReadableStream({
     async start(controller) {
       let fullReply = '';
+      let fullReasoning = '';
 
       const send = (event: unknown) => {
         controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`));
@@ -175,31 +176,41 @@ async function createStreamResponse(message: string, sessionId: string, storeId:
           if (done) break;
 
           buffer += decoder.decode(value, { stream: true });
-          const lines = buffer.split('\n');
-          buffer = lines.pop() || '';
+          const events = buffer.split('\n\n');
+          buffer = events.pop() || '';
 
-          for (const line of lines) {
-            if (line.startsWith('data: ')) {
-              const data = line.slice(6);
-              if (data === '[DONE]') {
-                send({ done: true, content: fullReply });
-              } else {
-                try {
-                  const parsed = JSON.parse(data);
-                  const content = parsed.choices?.[0]?.delta?.content || '';
-                  if (content) {
-                    fullReply += content;
-                    send({ content, done: false });
-                  }
-                } catch {
-                  // 忽略解析错误
+          for (const event of events) {
+            const lines = event
+              .split('\n')
+              .map((line) => line.trim())
+              .filter((line) => line.startsWith('data:'));
+
+            for (const line of lines) {
+              const data = line.replace(/^data:\s*/, '');
+              if (!data || data === '[DONE]') continue;
+
+              try {
+                const parsed = JSON.parse(data);
+                const content = parsed.choices?.[0]?.delta?.content || '';
+                const reasoning = parsed.choices?.[0]?.delta?.reasoning || 
+                                 parsed.choices?.[0]?.reasoning || '';
+                
+                if (content) {
+                  fullReply += content;
+                  send({ content, reasoning: '', done: false });
                 }
+                if (reasoning) {
+                  fullReasoning += reasoning;
+                  send({ content: '', reasoning, done: false });
+                }
+              } catch {
+                // 忽略解析错误
               }
             }
           }
         }
 
-        send({ done: true, content: fullReply });
+        send({ done: true, content: fullReply, reasoning: fullReasoning });
 
         try {
           await prisma.menstrualChatMessage.create({
@@ -231,8 +242,8 @@ async function createStreamResponse(message: string, sessionId: string, storeId:
 
   return new Response(readable, {
     headers: {
-      'Content-Type': 'text/event-stream',
-      'Cache-Control': 'no-cache',
+      'Content-Type': 'text/event-stream; charset=utf-8',
+      'Cache-Control': 'no-cache, no-transform',
       Connection: 'keep-alive',
     },
   });

@@ -30,6 +30,7 @@ import {
 } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
 import { Search, Plus, FileText, User, Phone, Calendar, Loader2, ChevronRight } from '@/lib/icons';
+import { DataTablePagination } from '@/components/ui/data-table-pagination';
 
 interface Customer {
   id: string;
@@ -495,7 +496,7 @@ export default function StoreCustomersPage() {
     router.push(`/store/report-submit?storeId=${storeId}&customerId=${customer.id}`);
   };
 
-  const totalPages = Math.ceil(total / pageSize);
+
 
   const formatDate = (dateString: string | null) => {
     if (!dateString) return '-';
@@ -606,69 +607,15 @@ export default function StoreCustomersPage() {
                 </Table>
 
                 {/* 桌面端分页 */}
-                <div className="flex items-center justify-between px-4 py-3 border-t">
-                  <div className="text-sm text-gray-500">
-                    共 {total} 位客户
-                  </div>
-                  <div className="flex items-center gap-4">
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm text-gray-500">每页</span>
-                      <Select
-                        value={pageSize.toString()}
-                        onValueChange={(value) => {
-                          setPageSize(Number(value));
-                          setCurrentPage(1);
-                        }}
-                      >
-                        <SelectTrigger className="w-20">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="10">10</SelectItem>
-                          <SelectItem value="20">20</SelectItem>
-                          <SelectItem value="50">50</SelectItem>
-                          <SelectItem value="100">100</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setCurrentPage(1)}
-                        disabled={currentPage === 1}
-                      >
-                        首页
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-                        disabled={currentPage === 1}
-                      >
-                        上一页
-                      </Button>
-                      <span className="text-sm text-gray-500">
-                        {currentPage} / {totalPages}
-                      </span>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-                        disabled={currentPage === totalPages}
-                      >
-                        下一页
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setCurrentPage(totalPages)}
-                        disabled={currentPage === totalPages}
-                      >
-                        末页
-                      </Button>
-                    </div>
-                  </div>
+                <div className="px-4 py-3 border-t">
+                  <DataTablePagination
+                    page={currentPage}
+                    pageSize={pageSize}
+                    total={total}
+                    onPageChange={setCurrentPage}
+                    onPageSizeChange={(size) => { setPageSize(size); setCurrentPage(1); }}
+                    pageSizeOptions={[10, 20, 50, 100]}
+                  />
                 </div>
               </>
             )}
@@ -755,31 +702,14 @@ export default function StoreCustomersPage() {
 
             {/* 移动端分页 - 简化版 */}
             <div className="bg-white rounded-lg border border-gray-200 p-3">
-              <div className="flex items-center justify-between">
-                <div className="text-xs text-gray-500">
-                  共 {total} 位 · 第 {currentPage}/{totalPages} 页
-                </div>
-                <div className="flex items-center gap-1">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-                    disabled={currentPage === 1}
-                    className="h-8 px-3 text-xs"
-                  >
-                    上一页
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-                    disabled={currentPage === totalPages}
-                    className="h-8 px-3 text-xs"
-                  >
-                    下一页
-                  </Button>
-                </div>
-              </div>
+              <DataTablePagination
+                page={currentPage}
+                pageSize={pageSize}
+                total={total}
+                onPageChange={setCurrentPage}
+                onPageSizeChange={(size) => { setPageSize(size); setCurrentPage(1); }}
+                pageSizeOptions={[10, 20, 50]}
+              />
             </div>
           </>
         )}

@@ -6,13 +6,13 @@ import { Input } from '@/components/ui/input';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Loader2, Send, Plus, Trash2, MessageSquare } from '@/lib/icons';
 import { useAuthStore } from '@/stores/auth.store';
-import ReactMarkdown from 'react-markdown';
-import remarkGfm from 'remark-gfm';
+import { ChatMarkdown } from '@/components/ui/chat-markdown';
 
 interface Message {
   id: string;
   role: 'user' | 'assistant';
   content: string;
+  reasoning: string;
   createdAt: string;
 }
 
@@ -87,7 +87,10 @@ export default function StoreMenstrualChatPage() {
       });
       const data = await res.json();
       if (data.messages) {
-        setMessages(data.messages);
+        setMessages(data.messages.map((msg: Message) => ({
+          ...msg,
+          reasoning: msg.reasoning || '',
+        })));
       }
     } catch (error) {
       console.error('Load session messages error:', error);
@@ -155,10 +158,20 @@ export default function StoreMenstrualChatPage() {
       id: Date.now().toString(),
       role: 'user',
       content: input.trim(),
+      reasoning: '',
       createdAt: new Date().toISOString(),
     };
 
-    setMessages((prev) => [...prev, userMessage]);
+    const assistantMessageId = (Date.now() + 1).toString();
+    const initialAssistantMessage: Message = {
+      id: assistantMessageId,
+      role: 'assistant',
+      content: '',
+      reasoning: '',
+      createdAt: new Date().toISOString(),
+    };
+
+    setMessages((prev) => [...prev, userMessage, initialAssistantMessage]);
     setInput('');
     setLoading(true);
     setError(null);
@@ -173,29 +186,106 @@ export default function StoreMenstrualChatPage() {
         body: JSON.stringify({ 
           message: userMessage.content, 
           sessionId: currentSessionId,
+          stream: true,
         }),
       });
 
       if (!res.ok) {
-        const data = await res.json();
+        const data = await res.json().catch(() => ({}));
         throw new Error(data.error || '发送失败');
       }
 
-      const data = await res.json();
-      setCurrentSessionId(data.sessionId);
-      loadSessions();
+      if (!res.body) {
+        const data = await res.json();
+        setCurrentSessionId(data.sessionId);
+        loadSessions();
+        setMessages((prev) => {
+          const updated = [...prev];
+          const lastMsg = updated[updated.length - 1];
+          if (lastMsg && lastMsg.id === assistantMessageId) {
+            updated[updated.length - 1] = {
+              ...lastMsg,
+              content: data.content || '抱歉，暂时无法回答您的问题。',
+            };
+          }
+          return updated;
+        });
+        return;
+      }
 
-      const assistantMessage: Message = {
-        id: (Date.now() + 1).toString(),
-        role: 'assistant',
-        content: data.content || '抱歉，暂时无法回答您的问题。',
-        createdAt: new Date().toISOString(),
-      };
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
 
-      setMessages((prev) => [...prev, assistantMessage]);
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const events = buffer.split('\n\n');
+        buffer = events.pop() || '';
+
+        for (const event of events) {
+          const lines = event
+            .split('\n')
+            .map((line) => line.trim())
+            .filter((line) => line.startsWith('data:'));
+
+          for (const line of lines) {
+            const raw = line.replace(/^data:\s*/, '');
+            if (!raw) continue;
+
+            let data: { content?: string; reasoning?: string; done?: boolean; error?: string; sessionId?: string };
+            try {
+              data = JSON.parse(raw);
+            } catch {
+              continue;
+            }
+
+            if (data.error) {
+              throw new Error(data.error);
+            }
+
+            if (data.done) {
+              if (data.sessionId) {
+                setCurrentSessionId(data.sessionId);
+              }
+              loadSessions();
+              continue;
+            }
+
+            if (data.content || data.reasoning) {
+              setMessages((prev) => {
+                const updated = [...prev];
+                const lastMsg = updated[updated.length - 1];
+                if (lastMsg && lastMsg.id === assistantMessageId) {
+                  updated[updated.length - 1] = {
+                    ...lastMsg,
+                    content: `${lastMsg.content}${data.content || ''}`,
+                    reasoning: `${lastMsg.reasoning}${data.reasoning || ''}`,
+                  };
+                }
+                return updated;
+              });
+            }
+          }
+        }
+      }
     } catch (err) {
       console.error('Chat error:', err);
       setError(err instanceof Error ? err.message : '发送失败，请重试');
+      setMessages((prev) => {
+        const updated = [...prev];
+        const lastMsg = updated[updated.length - 1];
+        if (lastMsg && lastMsg.id === assistantMessageId) {
+          updated[updated.length - 1] = {
+            ...lastMsg,
+            content: '',
+            reasoning: '',
+          };
+        }
+        return updated.filter(m => m.content || m.role === 'user');
+      });
     } finally {
       setLoading(false);
       inputRef.current?.focus();
@@ -322,60 +412,43 @@ export default function StoreMenstrualChatPage() {
               className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
             >
               <div
-                className={`max-w-[85%] rounded-lg px-4 py-3 break-words overflow-hidden ${
-                  msg.role === 'user'
-                    ? 'bg-[#004349] text-white'
-                    : 'bg-white border shadow-sm'
-                }`}
-              >
-                <div className="prose prose-sm max-w-none prose-headings:mt-2 prose-headings:mb-1 prose-p:mb-2 prose-p:last:mb-0 prose-ul:mb-2 prose-ol:mb-2 prose-li:mb-1">
-                  <ReactMarkdown
-                    remarkPlugins={[remarkGfm]}
-                    components={{
-                      p: ({ children }) => (
-                        <p className="mb-2 last:mb-0 whitespace-pre-wrap break-words">{children}</p>
-                      ),
-                      ul: ({ children }) => (
-                        <ul className="list-disc ml-4 mb-2 break-words">{children}</ul>
-                      ),
-                      ol: ({ children }) => (
-                        <ol className="list-decimal ml-4 mb-2 break-words">{children}</ol>
-                      ),
-                      li: ({ children }) => <li className="mb-1 break-words">{children}</li>,
-                      strong: ({ children }) => (
-                        <strong className="font-semibold break-words">{children}</strong>
-                      ),
-                      code: ({ children }) => (
-                        <code className="bg-gray-100 px-1 py-0.5 rounded text-sm break-all">{children}</code>
-                      ),
-                      h1: ({ children }) => (
-                        <h1 className="text-lg font-bold mt-3 mb-2">{children}</h1>
-                      ),
-                      h2: ({ children }) => (
-                        <h2 className="text-base font-bold mt-2 mb-1">{children}</h2>
-                      ),
-                      h3: ({ children }) => (
-                        <h3 className="text-sm font-bold mt-2 mb-1">{children}</h3>
-                      ),
-                    }}
-                  >
-                    {msg.content}
-                  </ReactMarkdown>
+                  className={`max-w-[85%] rounded-lg px-4 py-3 break-words overflow-hidden ${
+                    msg.role === 'user'
+                      ? 'bg-[#004349] text-white'
+                      : 'bg-white border shadow-sm'
+                  }`}
+                >
+                  {(loading && msg.role === 'assistant' && !msg.content) ? (
+                    <div className="flex items-center gap-2 text-gray-500">
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      <span>正在思考...</span>
+                    </div>
+                  ) : (
+                    <>
+                      {msg.reasoning && (
+                        <div className="mb-3 p-3 bg-[rgba(0,67,73,0.05)] rounded-lg border border-[rgba(0,67,73,0.1)]">
+                          <div className="flex items-center gap-2 mb-2">
+                            <div className="w-2 h-2 rounded-full bg-[#004349] animate-pulse" />
+                            <span className="text-xs font-bold text-[#004349] uppercase tracking-wider">思考过程</span>
+                          </div>
+                          <p className="text-sm text-gray-600 whitespace-pre-wrap leading-relaxed">
+                            {msg.reasoning}
+                          </p>
+                        </div>
+                      )}
+                      {(loading && msg.role === 'assistant') ? (
+                        <div className="text-sm text-gray-700 whitespace-pre-wrap leading-relaxed">
+                          <ChatMarkdown content={msg.content} />
+                          <span className="inline-block w-1 animate-pulse text-[#004349] ml-0.5">|</span>
+                        </div>
+                      ) : (
+                        <ChatMarkdown content={msg.content} />
+                      )}
+                    </>
+                  )}
                 </div>
-              </div>
             </div>
           ))}
-
-          {loading && (
-            <div className="flex justify-start">
-              <div className="bg-white border shadow-sm rounded-lg px-4 py-3">
-                <div className="flex items-center gap-2 text-gray-500">
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  <span>正在思考...</span>
-                </div>
-              </div>
-            </div>
-          )}
 
           {error && (
             <div className="flex justify-center">

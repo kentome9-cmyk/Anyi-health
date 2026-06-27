@@ -8,6 +8,7 @@ interface AuthState {
   userId: string | null;
   userName: string | null;
   storeId: string | null;
+  permissions: string[] | null;
   isAuthenticated: boolean;
   _hasHydrated: boolean;
 
@@ -16,7 +17,9 @@ interface AuthState {
     userId: string;
     userName: string | null;
     storeId: string | null;
+    permissions?: string[] | null;
   }) => void;
+  setPermissions: (permissions: string[] | null) => void;
   logout: () => void;
   setHasHydrated: (value: boolean) => void;
 }
@@ -28,6 +31,7 @@ export const useAuthStore = create<AuthState>()(
       userId: null,
       userName: null,
       storeId: null,
+      permissions: null,
       isAuthenticated: false,
       _hasHydrated: false,
 
@@ -37,8 +41,11 @@ export const useAuthStore = create<AuthState>()(
           userId: data.userId,
           userName: data.userName,
           storeId: data.storeId,
+          permissions: data.permissions ?? null,
           isAuthenticated: true,
         }),
+
+      setPermissions: (permissions) => set({ permissions }),
 
       logout: () =>
         set({
@@ -46,6 +53,7 @@ export const useAuthStore = create<AuthState>()(
           userId: null,
           userName: null,
           storeId: null,
+          permissions: null,
           isAuthenticated: false,
         }),
 

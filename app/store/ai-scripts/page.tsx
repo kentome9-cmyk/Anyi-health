@@ -20,10 +20,9 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import {
-  FileText, Copy, CheckCheck, Search, Send, Pencil, RefreshCw, BookOpen
-} from '@/lib/icons';
+import { FileText, Copy, CheckCheck, Search, Send, Pencil, RefreshCw, BookOpen } from '@/lib/icons';
 import { useAuthStore } from '@/stores/auth.store';
+import { extractScriptMetadata, getScriptTextToCopy, extractTopicDirection } from '@/lib/script-utils';
 
 interface ScriptRecord {
   id: string;
@@ -96,18 +95,7 @@ export default function StoreAIScriptsPage() {
   };
 
   const handleCopy = async (content: string, id: string) => {
-    // 尝试从JSON中提取口播逐字稿（支持原创的script和改写的rewrittenScript）
-    let textToCopy = content;
-    try {
-      const json = JSON.parse(content);
-      if (json.rewrittenScript && typeof json.rewrittenScript === 'string') {
-        textToCopy = json.rewrittenScript;
-      } else if (json.script && typeof json.script === 'string') {
-        textToCopy = json.script;
-      }
-    } catch {
-      // 如果不是有效的JSON，保持原样
-    }
+    const textToCopy = getScriptTextToCopy(content);
     await navigator.clipboard.writeText(textToCopy);
     setCopiedId(id);
     setTimeout(() => setCopiedId(null), 2000);
@@ -171,34 +159,7 @@ export default function StoreAIScriptsPage() {
     }
   };
 
-  const extractTopicDirection = (content: string) => {
-    const summaryMatch = content.match(/【内容摘要】([\s\S]*?)(?=【切入角度】|$)/);
-    const angleMatch = content.match(/【切入角度】([\s\S]*?)$/);
-    return {
-      summary: summaryMatch ? summaryMatch[1].trim() : '',
-      angle: angleMatch ? angleMatch[1].trim() : '',
-    };
-  };
 
-  const extractScriptMetadata = (content: string): { titleSuggestion: string; script: string; hashtags: string[]; shootingTips: string[] } => {
-    try {
-      let jsonStr = content;
-      if (content.includes('```json')) {
-        jsonStr = content.replace(/```json\n?/g, '').replace(/```+\n?/g, '').trim();
-      } else if (content.includes('```')) {
-        jsonStr = content.replace(/```+\n?/g, '').trim();
-      }
-      const json = JSON.parse(jsonStr);
-      return {
-        titleSuggestion: json.titleSuggestion || '',
-        script: json.rewrittenScript || json.script || '',
-        hashtags: Array.isArray(json.hashtags) ? json.hashtags.slice(0, 3) : [],
-        shootingTips: Array.isArray(json.shootingTips) ? json.shootingTips.slice(0, 3) : [],
-      };
-    } catch {
-      return { titleSuggestion: '', script: '', hashtags: [], shootingTips: [] };
-    }
-  };
 
   const formatDate = (dateStr: string) => {
     const date = new Date(dateStr);

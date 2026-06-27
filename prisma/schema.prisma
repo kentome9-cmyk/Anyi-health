@@ -23,6 +23,60 @@ model Admin {
   @@map("admin")
 }
 
+// ============================================
+// 系统设置 / 登录日志
+// ============================================
+
+// 登录日志
+model LoginLog {
+  id           String   @id @default(uuid())
+  userType     String   @db.VarChar(20)   // admin/store_user/customer
+  userId       String?                     // 登录失败时为 null
+  userName     String?  @db.VarChar(100)   // 登录失败时为输入的用户名/手机号
+  ip           String?  @db.VarChar(50)
+  userAgent    String?  @db.Text
+  success      Boolean
+  errorMessage String?  @db.VarChar(255)
+  createdAt    DateTime @default(now())
+
+  @@index([userType, userId])
+  @@index([createdAt])
+  @@map("login_log")
+}
+
+// 系统设置（key-value）
+model SystemSetting {
+  id          String   @id @default(uuid())
+  key         String   @unique @db.VarChar(100)
+  value       String?  @db.Text
+  description String?  @db.VarChar(255)
+  updatedBy   String?  @db.VarChar(100)
+  updatedAt   DateTime @updatedAt
+
+  @@map("system_setting")
+}
+
+// 操作日志
+model OperationLog {
+  id          String   @id @default(uuid())
+  operatorType String  @db.VarChar(20)   // admin/store_user
+  operatorId  String?                     // 操作者ID
+  operatorName String? @db.VarChar(100)   // 操作者名称/用户名
+  action      String   @db.VarChar(50)   // 操作类型：create/update/delete/export/reset_password等
+  module      String   @db.VarChar(50)   // 模块：customer/store/ai_settings/prompt/admin等
+  targetId    String?                     // 操作对象ID
+  targetName  String?  @db.VarChar(255)   // 操作对象名称（冗余，便于展示）
+  detail      String?  @db.Text           // 操作详情（JSON或文本）
+  ip          String?  @db.VarChar(50)
+  userAgent   String?  @db.Text
+  createdAt   DateTime @default(now())
+
+  @@index([operatorType, operatorId])
+  @@index([module, action])
+  @@index([createdAt])
+  @@map("operation_log")
+}
+
 // 门店用户（登录凭证）
 model StoreUser {
   id           String   @id @default(uuid())
@@ -30,6 +84,14 @@ model StoreUser {
   password     String   @db.Text
   name         String?  @db.VarChar(50)
   status       Boolean  @default(true)
+  // 微信相关字段（三端统一，unionId 优先）
+  wxOpenid     String?  @unique @map("wx_openid") @db.VarChar(100)    // 公众号 openid
+  wxMpOpenid   String?  @unique @map("wx_mp_openid") @db.VarChar(100) // 小程序 openid
+  wxUnionid    String?  @unique @map("wx_unionid") @db.VarChar(100)   // 微信 unionid
+  wxNickname   String?  @map("wx_nickname") @db.VarChar(100)          // 微信昵称
+  wxAvatar     String?  @map("wx_avatar") @db.Text                    // 微信头像
+  // 功能权限（JSON 数组，如 ["customer_manage", "short_video"]）
+  permissions  String?  @db.Text
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
