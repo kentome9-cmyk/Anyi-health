@@ -40,3 +40,10 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# test data files (API test payloads)
+login.json
+login2.json
+newadmin.json
+reset.json
+cookies.txt
