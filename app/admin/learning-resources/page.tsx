@@ -39,6 +39,9 @@ import {
   RefreshCw,
   FileText,
   Presentation,
+  Library,
+  Check,
+  X as XIcon,
 } from '@/lib/icons';
 import { DataTablePagination } from '@/components/ui/data-table-pagination';
 import { useDataTablePagination } from '@/hooks/use-data-table-pagination';
@@ -60,6 +63,15 @@ interface LearningResource {
   updatedAt: string;
 }
 
+interface LearningCategory {
+  id: string;
+  name: string;
+  sortOrder: number;
+  resourceCount?: number;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
 interface FormData {
   title: string;
   category: string;
@@ -74,15 +86,6 @@ const emptyForm: FormData = {
   file: null,
 };
 
-const CATEGORIES = [
-  { value: '培训课程', label: '培训课程' },
-  { value: '产品知识', label: '产品知识' },
-  { value: '营销技巧', label: '营销技巧' },
-  { value: '服务规范', label: '服务规范' },
-  { value: '行业资讯', label: '行业资讯' },
-  { value: '其他', label: '其他' },
-];
-
 const TYPE_LABELS: Record<string, string> = {
   md: 'MD文档',
   ppt: 'PPT/PDF',
@@ -96,6 +99,7 @@ function truncate(text: string | null, len: number): string {
 
 export default function AdminLearningResourcesPage() {
   const [resources, setResources] = useState<LearningResource[]>([]);
+  const [categories, setCategories] = useState<LearningCategory[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchKeyword, setSearchKeyword] = useState('');
   const [searchInput, setSearchInput] = useState('');
@@ -111,12 +115,21 @@ export default function AdminLearningResourcesPage() {
   const [batchDeleteOpen, setBatchDeleteOpen] = useState(false);
   const [batchDeleting, setBatchDeleting] = useState(false);
 
+  // 分类管理
+  const [categoryDialogOpen, setCategoryDialogOpen] = useState(false);
+  const [editingCategoryId, setEditingCategoryId] = useState<string | null>(null);
+  const [editingCategoryName, setEditingCategoryName] = useState('');
+  const [newCategoryName, setNewCategoryName] = useState('');
+  const [categorySubmitting, setCategorySubmitting] = useState(false);
+  const [deleteCategory, setDeleteCategory] = useState<LearningCategory | null>(null);
+
   const [toast, setToast] = useState<{ type: 'success' | 'error'; msg: string } | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     loadResources();
+    loadCategories();
   }, []);
 
   useEffect(() => {
@@ -154,6 +167,127 @@ export default function AdminLearningResourcesPage() {
       showToast('error', '加载失败');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadCategories = async () => {
+    try {
+      const res = await fetch('/api/admin/learning-categories');
+      if (!res.ok) return;
+      const data = await res.json();
+      setCategories(Array.isArray(data) ? data : []);
+    } catch (e) {
+      console.error('Failed to load categories:', e);
+    }
+  };
+
+  const handleAddCategory = async () => {
+    const name = newCategoryName.trim();
+    if (!name) {
+      showToast('error', '请输入分类名称');
+      return;
+    }
+    if (categories.some((c) => c.name === name)) {
+      showToast('error', '该分类已存在');
+      return;
+    }
+    try {
+      setCategorySubmitting(true);
+      const res = await fetch('/api/admin/learning-categories', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        showToast('error', err.error || '创建失败');
+        return;
+      }
+      setNewCategoryName('');
+      showToast('success', '已新建分类');
+      await loadCategories();
+    } catch (e) {
+      console.error(e);
+      showToast('error', '创建失败');
+    } finally {
+      setCategorySubmitting(false);
+    }
+  };
+
+  const startEditCategory = (cat: LearningCategory) => {
+    setEditingCategoryId(cat.id);
+    setEditingCategoryName(cat.name);
+  };
+
+  const cancelEditCategory = () => {
+    setEditingCategoryId(null);
+    setEditingCategoryName('');
+  };
+
+  const saveEditCategory = async (cat: LearningCategory) => {
+    const name = editingCategoryName.trim();
+    if (!name) {
+      showToast('error', '分类名称不能为空');
+      return;
+    }
+    if (name === cat.name) {
+      cancelEditCategory();
+      return;
+    }
+    if (categories.some((c) => c.id !== cat.id && c.name === name)) {
+      showToast('error', '该分类名称已被占用');
+      return;
+    }
+    try {
+      setCategorySubmitting(true);
+      const res = await fetch(`/api/admin/learning-categories/${cat.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        showToast('error', err.error || '更新失败');
+        return;
+      }
+      cancelEditCategory();
+      showToast('success', '已更新分类');
+      await Promise.all([loadCategories(), loadResources()]);
+    } catch (e) {
+      console.error(e);
+      showToast('error', '更新失败');
+    } finally {
+      setCategorySubmitting(false);
+    }
+  };
+
+  const handleDeleteCategory = async () => {
+    if (!deleteCategory) return;
+    try {
+      setCategorySubmitting(true);
+      const res = await fetch(`/api/admin/learning-categories/${deleteCategory.id}`, {
+        method: 'DELETE',
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        showToast('error', err.error || '删除失败');
+        return;
+      }
+      showToast('success', '已删除分类');
+      setDeleteCategory(null);
+      // 过滤掉已删除的分类，同时重置当前过滤器
+      if (filterCategory === deleteCategory.name) {
+        setFilterCategory('all');
+      }
+      if (formData.category === deleteCategory.name) {
+        setFormData((prev) => ({ ...prev, category: '' }));
+      }
+      await Promise.all([loadCategories(), loadResources()]);
+    } catch (e) {
+      console.error(e);
+      showToast('error', '删除失败');
+    } finally {
+      setCategorySubmitting(false);
     }
   };
 
@@ -340,6 +474,10 @@ export default function AdminLearningResourcesPage() {
           <Button variant="outline" size="icon" onClick={loadResources} title="刷新">
             <RefreshCw className="h-4 w-4" />
           </Button>
+          <Button variant="outline" onClick={() => setCategoryDialogOpen(true)}>
+            <Library className="h-4 w-4 mr-1.5" />
+            分类管理
+          </Button>
           <Button onClick={openAddDialog}>
             <Plus className="h-4 w-4 mr-1.5" />
             上传资源
@@ -381,9 +519,9 @@ export default function AdminLearningResourcesPage() {
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">全部分类</SelectItem>
-            {CATEGORIES.map((cat) => (
-              <SelectItem key={cat.value} value={cat.value}>
-                {cat.label}
+            {categories.map((cat) => (
+              <SelectItem key={cat.id} value={cat.name}>
+                {cat.name}
               </SelectItem>
             ))}
           </SelectContent>
@@ -546,14 +684,20 @@ export default function AdminLearningResourcesPage() {
                 </Label>
                 <Select value={formData.category} onValueChange={(val) => setFormData({ ...formData, category: val })}>
                   <SelectTrigger id="category">
-                    <SelectValue placeholder="选择分类" />
+                    <SelectValue placeholder={categories.length === 0 ? '请先在分类管理中创建' : '选择分类'} />
                   </SelectTrigger>
                   <SelectContent>
-                    {CATEGORIES.map((cat) => (
-                      <SelectItem key={cat.value} value={cat.value}>
-                        {cat.label}
-                      </SelectItem>
-                    ))}
+                    {categories.length === 0 ? (
+                      <div className="px-3 py-2 text-xs text-gray-500">
+                        暂无分类，请点击右上角"分类管理"新建
+                      </div>
+                    ) : (
+                      categories.map((cat) => (
+                        <SelectItem key={cat.id} value={cat.name}>
+                          {cat.name}
+                        </SelectItem>
+                      ))
+                    )}
                   </SelectContent>
                 </Select>
               </div>
@@ -665,6 +809,167 @@ export default function AdminLearningResourcesPage() {
             >
               {batchDeleting ? '删除中...' : '确认删除'}
             </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* 分类管理弹窗 */}
+      <Dialog
+        open={categoryDialogOpen}
+        onOpenChange={(o) => {
+          setCategoryDialogOpen(o);
+          if (!o) {
+            cancelEditCategory();
+            setNewCategoryName('');
+          }
+        }}
+      >
+        <DialogContent className="!max-w-[640px] !w-[95vw] max-h-[85vh] overflow-hidden flex flex-col [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-track]:bg-gray-100 [&::-webkit-scrollbar-track]:rounded-full [&::-webkit-scrollbar-thumb]:bg-gray-300 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:hover:bg-gray-400">
+          <DialogHeader>
+            <DialogTitle>分类管理</DialogTitle>
+          </DialogHeader>
+
+          {/* 新建分类 */}
+          <div className="flex items-center gap-2 pt-2 border-b pb-4">
+            <Input
+              placeholder="输入新分类名称（最多 50 字）"
+              value={newCategoryName}
+              maxLength={50}
+              onChange={(e) => setNewCategoryName(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') handleAddCategory();
+              }}
+              className="flex-1"
+            />
+            <Button
+              onClick={handleAddCategory}
+              disabled={categorySubmitting || !newCategoryName.trim()}
+            >
+              <Plus className="h-4 w-4 mr-1.5" />
+              新建
+            </Button>
+          </div>
+
+          {/* 分类列表 */}
+          <div className="flex-1 overflow-y-auto -mx-2 px-2">
+            {categories.length === 0 ? (
+              <div className="py-12 text-center text-sm text-gray-500">
+                暂无分类，请在上方输入名称后点击"新建"
+              </div>
+            ) : (
+              <div className="divide-y divide-gray-100">
+                {categories.map((cat) => {
+                  const isEditing = editingCategoryId === cat.id;
+                  return (
+                    <div
+                      key={cat.id}
+                      className="flex items-center gap-3 py-2.5 px-1 hover:bg-gray-50 rounded"
+                    >
+                      <div className="flex-1 min-w-0">
+                        {isEditing ? (
+                          <Input
+                            value={editingCategoryName}
+                            maxLength={50}
+                            onChange={(e) => setEditingCategoryName(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') saveEditCategory(cat);
+                              if (e.key === 'Escape') cancelEditCategory();
+                            }}
+                            autoFocus
+                            className="h-8"
+                          />
+                        ) : (
+                          <div className="flex items-center gap-2 min-w-0">
+                            <span className="font-medium text-gray-900 truncate">
+                              {cat.name}
+                            </span>
+                            <span className="text-xs text-gray-500 flex-shrink-0">
+                              {cat.resourceCount ?? 0} 个资源
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-1 flex-shrink-0">
+                        {isEditing ? (
+                          <>
+                            <Button
+                              variant="ghost"
+                              size="icon-sm"
+                              onClick={() => saveEditCategory(cat)}
+                              disabled={categorySubmitting}
+                              title="保存"
+                              className="text-emerald-700 hover:text-emerald-800 hover:bg-emerald-50"
+                            >
+                              <Check className="h-3.5 w-3.5" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon-sm"
+                              onClick={cancelEditCategory}
+                              disabled={categorySubmitting}
+                              title="取消"
+                            >
+                              <XIcon className="h-3.5 w-3.5" />
+                            </Button>
+                          </>
+                        ) : (
+                          <>
+                            <Button
+                              variant="ghost"
+                              size="icon-sm"
+                              onClick={() => startEditCategory(cat)}
+                              title="编辑"
+                            >
+                              <Pencil className="h-3.5 w-3.5" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon-sm"
+                              onClick={() => setDeleteCategory(cat)}
+                              title="删除"
+                              className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </Button>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          <div className="flex justify-end pt-3 mt-2 border-t">
+            <Button variant="outline" onClick={() => setCategoryDialogOpen(false)}>
+              完成
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <AlertDialog open={!!deleteCategory} onOpenChange={(o) => !o && setDeleteCategory(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>确认删除分类</AlertDialogTitle>
+            <AlertDialogDescription>
+              {deleteCategory && deleteCategory.resourceCount
+                ? `分类「${deleteCategory.name}」下还有 ${deleteCategory.resourceCount} 个学习资源，无法删除。请先调整或删除相关资源后再试。`
+                : `确定要删除分类「${deleteCategory?.name}」吗？此操作无法撤销。`}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>取消</AlertDialogCancel>
+            {(!deleteCategory || !deleteCategory.resourceCount) && (
+              <AlertDialogAction
+                onClick={handleDeleteCategory}
+                disabled={categorySubmitting}
+                className="bg-red-600 hover:bg-red-700 text-white"
+              >
+                {categorySubmitting ? '删除中...' : '确认删除'}
+              </AlertDialogAction>
+            )}
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

@@ -57,6 +57,17 @@ export async function PUT(
         );
       }
 
+      const categoryExists = await prisma.learningCategory.findUnique({
+        where: { name: category },
+        select: { id: true },
+      });
+      if (!categoryExists) {
+        return NextResponse.json(
+          { error: `分类「${category}」不存在，请先在分类管理中创建` },
+          { status: 400 }
+        );
+      }
+
       const existingResource = await prisma.learningResource.findUnique({
         where: { id },
         select: { filePath: true, type: true, fileSize: true, pageCount: true },
@@ -123,6 +134,17 @@ export async function PUT(
       if (!title || !type || !category) {
         return NextResponse.json(
           { error: '标题、类型和分类不能为空' },
+          { status: 400 }
+        );
+      }
+
+      const categoryExists = await prisma.learningCategory.findUnique({
+        where: { name: category },
+        select: { id: true },
+      });
+      if (!categoryExists) {
+        return NextResponse.json(
+          { error: `分类「${category}」不存在，请先在分类管理中创建` },
           { status: 400 }
         );
       }

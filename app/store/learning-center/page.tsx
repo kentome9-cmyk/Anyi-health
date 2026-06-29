@@ -31,14 +31,11 @@ interface LearningResource {
   updatedAt: string;
 }
 
-const CATEGORIES = [
-  { value: '培训课程', label: '培训课程' },
-  { value: '产品知识', label: '产品知识' },
-  { value: '营销技巧', label: '营销技巧' },
-  { value: '服务规范', label: '服务规范' },
-  { value: '行业资讯', label: '行业资讯' },
-  { value: '其他', label: '其他' },
-];
+interface LearningCategory {
+  id: string;
+  name: string;
+  sortOrder: number;
+}
 
 const TYPE_LABELS: Record<string, string> = {
   md: 'MD文档',
@@ -61,6 +58,7 @@ export default function StoreLearningCenterPage() {
   const router = useRouter();
   const { userType, isAuthenticated, _hasHydrated } = useAuthStore();
   const [resources, setResources] = useState<LearningResource[]>([]);
+  const [categories, setCategories] = useState<LearningCategory[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchKeyword, setSearchKeyword] = useState('');
   const [searchInput, setSearchInput] = useState('');
@@ -87,8 +85,14 @@ export default function StoreLearningCenterPage() {
       setLoading(true);
       const res = await fetch('/api/store/learning-resources');
       const data = await res.json();
-      const list = Array.isArray(data) ? data : data.list || [];
+      const list: LearningResource[] = Array.isArray(data)
+        ? data
+        : data.list || [];
+      const listCategories: LearningCategory[] = Array.isArray(data?.categories)
+        ? data.categories
+        : [];
       setResources(list);
+      setCategories(listCategories);
     } catch (e) {
       console.error('Failed to load learning resources:', e);
     } finally {
@@ -98,8 +102,9 @@ export default function StoreLearningCenterPage() {
 
   const groupedResources = useMemo(() => {
     const grouped: Record<string, LearningResource[]> = {};
-    CATEGORIES.forEach((cat) => {
-      grouped[cat.value] = [];
+    // 优先用后端返回的分类列表作为分组容器（保证顺序与管理员侧一致）
+    categories.forEach((cat) => {
+      grouped[cat.name] = [];
     });
 
     const filtered = searchKeyword.trim()
@@ -129,7 +134,7 @@ export default function StoreLearningCenterPage() {
     });
 
     return grouped;
-  }, [resources, searchKeyword]);
+  }, [resources, categories, searchKeyword]);
 
   useEffect(() => {
     if (searchKeyword.trim()) {
@@ -221,20 +226,25 @@ export default function StoreLearningCenterPage() {
           </div>
         ) : (
           <div className="space-y-3">
-            {CATEGORIES.map((category) => {
-              const items = groupedResources[category.value] || [];
+            {[
+              ...categories.map((c) => c.name),
+              ...Object.keys(groupedResources).filter(
+                (name) => !categories.some((c) => c.name === name)
+              ),
+            ].map((categoryName) => {
+              const items = groupedResources[categoryName] || [];
               if (items.length === 0) return null;
 
-              const isExpanded = expandedCategories.has(category.value) || searchKeyword.trim() !== '';
+              const isExpanded = expandedCategories.has(categoryName) || searchKeyword.trim() !== '';
 
               return (
                 <div
-                  key={category.value}
+                  key={categoryName}
                   className="bg-white rounded-lg border border-slate-200 shadow-sm overflow-hidden"
                 >
                   {/* 分类标题 */}
                   <button
-                    onClick={() => toggleCategory(category.value)}
+                    onClick={() => toggleCategory(categoryName)}
                     className="w-full flex items-center justify-between px-5 py-3.5 hover:bg-slate-50 transition-colors"
                   >
                     <div className="flex items-center gap-2.5">
@@ -244,7 +254,7 @@ export default function StoreLearningCenterPage() {
                         <ChevronRight className="h-4 w-4 text-slate-500" />
                       )}
                       <h2 className="text-base font-semibold text-slate-900">
-                        {category.label}
+                        {categoryName}
                       </h2>
                       <span className="text-sm text-slate-500">（{items.length}）</span>
                     </div>

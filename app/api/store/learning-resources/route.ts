@@ -38,12 +38,18 @@ export async function GET(request: Request) {
       where.category = category;
     }
 
-    const list: LearningResource[] = await prisma.learningResource.findMany({
-      where,
-      orderBy: [{ sortOrder: 'asc' }, { createdAt: 'desc' }],
-    });
+    const [list, categories] = await Promise.all([
+      prisma.learningResource.findMany({
+        where,
+        orderBy: [{ sortOrder: 'asc' }, { createdAt: 'desc' }],
+      }),
+      prisma.learningCategory.findMany({
+        orderBy: [{ sortOrder: 'asc' }, { createdAt: 'desc' }],
+        select: { id: true, name: true, sortOrder: true },
+      }),
+    ]);
 
-    return NextResponse.json(list);
+    return NextResponse.json({ list, categories });
   } catch (error) {
     console.error('Get learning resources error:', error);
     return NextResponse.json(

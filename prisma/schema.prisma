@@ -564,3 +564,17 @@ model LearningResource {
   @@index([isActive])
   @@map("learning_resource")
 }
+
+// ============================================
+// 学习中心 - 分类表（管理员可自定义）
+// ============================================
+model LearningCategory {
+  id          String   @id @default(uuid())
+  name        String   @unique @db.VarChar(100)  // 分类名称
+  sortOrder   Int      @default(0)               // 排序
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([sortOrder])
+  @@map("learning_category")
+}

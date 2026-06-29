@@ -107,6 +107,17 @@ export async function POST(request: Request) {
         );
       }
 
+      const categoryExists = await prisma.learningCategory.findUnique({
+        where: { name: category },
+        select: { id: true },
+      });
+      if (!categoryExists) {
+        return NextResponse.json(
+          { error: `分类「${category}」不存在，请先在分类管理中创建` },
+          { status: 400 }
+        );
+      }
+
       if (type === 'ppt' && !file) {
         return NextResponse.json(
           { error: '上传PPT文件不能为空' },
@@ -196,6 +207,17 @@ export async function POST(request: Request) {
       if (!title || !type || !category) {
         return NextResponse.json(
           { error: '标题、类型和分类不能为空' },
+          { status: 400 }
+        );
+      }
+
+      const categoryExists = await prisma.learningCategory.findUnique({
+        where: { name: category },
+        select: { id: true },
+      });
+      if (!categoryExists) {
+        return NextResponse.json(
+          { error: `分类「${category}」不存在，请先在分类管理中创建` },
           { status: 400 }
         );
       }
