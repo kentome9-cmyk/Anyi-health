@@ -1,11 +1,14 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { requireAdmin, handleAuthError } from '@/lib/auth';
+import { logError } from '@/lib/logger';
 
 export async function GET(request: Request) {
   try {
+    await requireAdmin();
     const { searchParams } = new URL(request.url);
-    const page = parseInt(searchParams.get('page') || '1');
-    const pageSize = parseInt(searchParams.get('pageSize') || '20');
+    const page = Math.max(1, parseInt(searchParams.get('page') || '1'));
+    const pageSize = Math.min(100, Math.max(1, parseInt(searchParams.get('pageSize') || '20')));
     const storeId = searchParams.get('storeId') || '';
     const keyword = searchParams.get('keyword') || '';
     const skip = (page - 1) * pageSize;
@@ -55,10 +58,7 @@ export async function GET(request: Request) {
       pageSize,
     });
   } catch (error) {
-    console.error('Get ai analysis error:', error);
-    return NextResponse.json(
-      { error: '获取AI分析记录失败' },
-      { status: 500 }
-    );
+    logError('Get ai analysis error', error);
+    return handleAuthError(error);
   }
 }

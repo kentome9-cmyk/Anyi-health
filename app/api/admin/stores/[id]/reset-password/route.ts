@@ -1,21 +1,28 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import bcrypt from 'bcryptjs';
-import { getAuthCookie } from '@/lib/auth-cookie';
+import { requireAdmin, handleAuthError } from '@/lib/auth';
 
 type RouteContext = {
   params: Promise<{ id: string }>;
 };
 
-const DEFAULT_RESET_PASSWORD = '123456';
+function generateRandomPassword(length: number = 8): string {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789';
+  let result = '';
+  for (let i = 0; i < length; i++) {
+    result += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return result;
+}
 
 export async function POST(
   request: Request,
   { params }: RouteContext
 ) {
   try {
+    await requireAdmin();
     const { id } = await params;
-    const auth = await getAuthCookie();
 
     const store = await prisma.store.findUnique({
       where: { id },
@@ -36,7 +43,8 @@ export async function POST(
       );
     }
 
-    const hashedPassword = await bcrypt.hash(DEFAULT_RESET_PASSWORD, 10);
+    const tempPassword = generateRandomPassword();
+    const hashedPassword = await bcrypt.hash(tempPassword, 10);
 
     await prisma.storeUser.update({
       where: { id: store.storeUser.id },
@@ -46,14 +54,14 @@ export async function POST(
     try {
       await prisma.operationLog.create({
         data: {
-          operatorType: auth?.userType ?? 'admin',
-          operatorId: auth?.userId ?? null,
-          operatorName: auth?.userId ?? null,
+          operatorType: 'admin',
+          operatorId: null,
+          operatorName: null,
           action: 'reset_password',
           module: 'store',
           targetId: store.id,
           targetName: store.storeName,
-          detail: `重置门店账号密码为默认密码（${DEFAULT_RESET_PASSWORD}），账号：${store.storeUser.phone}`,
+          detail: `重置门店账号密码，账号：${store.storeUser.phone}`,
           ip: request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ?? null,
           userAgent: request.headers.get('user-agent') ?? null,
         },
@@ -64,13 +72,9 @@ export async function POST(
 
     return NextResponse.json({
       success: true,
-      defaultPassword: DEFAULT_RESET_PASSWORD,
+      tempPassword,
     });
   } catch (error) {
-    console.error('Reset store password error:', error);
-    return NextResponse.json(
-      { error: '重置密码失败' },
-      { status: 500 }
-    );
+    return handleAuthError(error);
   }
 }

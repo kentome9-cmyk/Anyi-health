@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { logError } from '@/lib/logger';
 
 type RouteContext = {
   params: Promise<{ id: string }>;
@@ -48,7 +49,7 @@ export async function GET(
       bodyRecords: plan.bodyRecords,
     });
   } catch (error) {
-    console.error('Get store plan detail error:', error);
+    logError('Get store plan detail error', error);
     return NextResponse.json(
       { error: '获取方案详情失败' },
       { status: 500 }
@@ -63,7 +64,6 @@ export async function PUT(
   try {
     const { id } = await params;
     const body = await request.json();
-    console.log('[DEBUG] Store update plan request body:', JSON.stringify(body, null, 2));
     
     const {
       structuredContent,
@@ -90,13 +90,9 @@ export async function PUT(
       },
     });
 
-    console.log('[DEBUG] Plan updated successfully:', plan.id);
     return NextResponse.json(plan);
   } catch (error) {
-    console.error('[ERROR] Update plan error:', error);
-    if (error instanceof Error) {
-      console.error('[ERROR] Error message:', error.message);
-    }
+    logError('Update plan error', error);
     return NextResponse.json(
       { error: '更新方案失败', detail: error instanceof Error ? error.message : 'unknown' },
       { status: 500 }

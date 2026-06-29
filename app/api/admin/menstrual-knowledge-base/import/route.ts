@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import * as XLSX from 'xlsx';
 import { getEmbedding } from '@/lib/openai';
+import { requireAdmin, handleAuthError } from '@/lib/auth';
 
 type EmbeddingField =
   | 'category'
@@ -21,6 +22,10 @@ const ALL_FIELDS: EmbeddingField[] = [
   'lifestyleAdvice',
   'attention',
 ];
+
+const MAX_FILE_SIZE = 10 * 1024 * 1024;
+const MAX_ROWS = 1000;
+const MAX_COLS = 50;
 
 function parseCSV(content: string): any[] {
   const lines = content.trim().split(/\r?\n/);
@@ -57,9 +62,13 @@ function parseCSV(content: string): any[] {
   };
 
   const headers = parseLine(lines[0]).map((h) => h.trim());
+  if (headers.length > MAX_COLS) {
+    return [];
+  }
+
   const dataList: any[] = [];
 
-  for (let i = 1; i < lines.length; i++) {
+  for (let i = 1; i < Math.min(lines.length, MAX_ROWS + 1); i++) {
     if (!lines[i].trim()) continue;
     const values = parseLine(lines[i]);
     const row: Record<string, string> = {};
@@ -82,6 +91,7 @@ function parseCSV(content: string): any[] {
 
 export async function POST(request: Request) {
   try {
+    await requireAdmin();
     const formData = await request.formData();
     const file = formData.get('file') as File;
     const embeddingFieldsStr = formData.get('embeddingFields') as string;
@@ -89,6 +99,13 @@ export async function POST(request: Request) {
 
     if (!file) {
       return NextResponse.json({ error: '请上传文件' }, { status: 400 });
+    }
+
+    if (file.size > MAX_FILE_SIZE) {
+      return NextResponse.json(
+        { error: `文件大小超过限制，最大允许 ${(MAX_FILE_SIZE / (1024 * 1024)).toFixed(1)} MB` },
+        { status: 400 }
+      );
     }
 
     const extension = file.name.split('.').pop()?.toLowerCase();
@@ -125,7 +142,20 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: '文件内容为空或格式不正确' }, { status: 400 });
       }
 
+      if (data.length > MAX_ROWS + 1) {
+        return NextResponse.json(
+          { error: `行数超过限制，最大允许 ${MAX_ROWS} 行` },
+          { status: 400 }
+        );
+      }
+
       const headers = (data[0] as string[]).map((h) => String(h || '').trim());
+      if (headers.length > MAX_COLS) {
+        return NextResponse.json(
+          { error: `列数超过限制，最大允许 ${MAX_COLS} 列` },
+          { status: 400 }
+        );
+      }
 
       for (let i = 1; i < data.length; i++) {
         const row = data[i];
@@ -217,10 +247,6 @@ export async function POST(request: Request) {
       message,
     });
   } catch (error) {
-    console.error('Import menstrual knowledge base error:', error);
-    return NextResponse.json(
-      { error: '导入失败：' + (error as Error).message },
-      { status: 500 }
-    );
+    return handleAuthError(error);
   }
 }

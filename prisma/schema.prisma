@@ -162,6 +162,7 @@ model Customer {
   bodyRecords     BodyRecord[]
   aiAnalyses      AiAnalysis[]
 
+  @@unique([storeId, phone], name: "customer_storeId_phone_unique")
   @@index([storeId])
   @@index([phone])
   @@index([name])

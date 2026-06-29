@@ -1,13 +1,25 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getOpenAIConfig } from '@/lib/openai';
+import { validateId, validateMessageArray, validateString } from '@/lib/validation';
 
 export async function POST(request: Request) {
   try {
     const body = await request.json();
     const { templateId, variables, messages, systemPrompt, storeId } = body;
 
-    // 获取模板信息
+    if (!validateId(templateId)) {
+      return NextResponse.json({ error: '无效的模板ID' }, { status: 400 });
+    }
+
+    if (messages && !validateMessageArray(messages)) {
+      return NextResponse.json({ error: '消息格式无效' }, { status: 400 });
+    }
+
+    if (systemPrompt && !validateString(systemPrompt, 0, 10000)) {
+      return NextResponse.json({ error: '系统提示词过长' }, { status: 400 });
+    }
+
     const template = await prisma.contentTemplate.findUnique({
       where: { id: templateId },
     });

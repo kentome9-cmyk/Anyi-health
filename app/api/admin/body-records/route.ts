@@ -1,11 +1,14 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { requireAdmin, handleAuthError } from '@/lib/auth';
+import { logError } from '@/lib/logger';
 
 export async function GET(request: Request) {
   try {
+    await requireAdmin();
     const { searchParams } = new URL(request.url);
-    const page = parseInt(searchParams.get('page') || '1');
-    const pageSize = parseInt(searchParams.get('pageSize') || '20');
+    const page = Math.max(1, parseInt(searchParams.get('page') || '1'));
+    const pageSize = Math.min(100, Math.max(1, parseInt(searchParams.get('pageSize') || '20')));
     const customerId = searchParams.get('customerId') || '';
     const storeId = searchParams.get('storeId') || '';
     const planId = searchParams.get('planId') || '';
@@ -60,16 +63,14 @@ export async function GET(request: Request) {
       pageSize,
     });
   } catch (error) {
-    console.error('Get body records error:', error);
-    return NextResponse.json(
-      { error: '获取身体记录列表失败' },
-      { status: 500 }
-    );
+    logError('Get body records error', error);
+    return handleAuthError(error);
   }
 }
 
 export async function POST(request: Request) {
   try {
+    await requireAdmin();
     const body = await request.json();
     const {
       storeId,
@@ -102,10 +103,7 @@ export async function POST(request: Request) {
 
     return NextResponse.json(record);
   } catch (error) {
-    console.error('Create body record error:', error);
-    return NextResponse.json(
-      { error: '创建身体记录失败' },
-      { status: 500 }
-    );
+    logError('Create body record error', error);
+    return handleAuthError(error);
   }
 }

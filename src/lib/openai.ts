@@ -1,4 +1,5 @@
 import { prisma } from '@/lib/prisma';
+import { decrypt } from '@/lib/crypto';
 
 interface OpenAIConfig {
   apiKey: string;
@@ -10,6 +11,17 @@ interface EmbeddingConfig {
   apiKey: string;
   baseUrl: string;
   modelId: string;
+}
+
+const CACHE_DURATION = 5 * 60 * 1000;
+let knowledgeCache: { data: any[]; timestamp: number } | null = null;
+let menstrualKnowledgeCache: { data: any[]; timestamp: number } | null = null;
+let productCache: { data: any[]; timestamp: number } | null = null;
+let healthPlanCache: { data: any[]; timestamp: number } | null = null;
+
+function isCacheValid(cache: { timestamp: number } | null): boolean {
+  if (!cache) return false;
+  return Date.now() - cache.timestamp < CACHE_DURATION;
 }
 
 async function getOpenAIConfig(module: string = 'default'): Promise<OpenAIConfig | null> {
@@ -26,7 +38,7 @@ async function getOpenAIConfig(module: string = 'default'): Promise<OpenAIConfig
   }
 
   return {
-    apiKey: settings.apiKey,
+    apiKey: decrypt(settings.apiKey),
     baseUrl: settings.baseUrl,
     modelId: settings.modelId,
   };
@@ -46,7 +58,7 @@ async function getEmbeddingConfig(module: string = 'default'): Promise<Embedding
   }
 
   return {
-    apiKey: settings.embeddingApiKey,
+    apiKey: decrypt(settings.embeddingApiKey),
     baseUrl: settings.embeddingBaseUrl,
     modelId: settings.embeddingModelId,
   };
@@ -150,6 +162,10 @@ interface EmbeddableItem {
   embedding: unknown | null | undefined;
 }
 
+function isNumberArray(value: unknown): value is number[] {
+  return Array.isArray(value) && value.every(item => typeof item === 'number');
+}
+
 async function searchByEmbedding<T extends EmbeddableItem>(
   queryEmbedding: number[],
   items: T[],
@@ -157,7 +173,7 @@ async function searchByEmbedding<T extends EmbeddableItem>(
   topK: number = 5,
   minSimilarity: number = 0.5
 ): Promise<unknown[]> {
-  const itemsWithEmbedding = items.filter(item => item.embedding !== null && item.embedding !== undefined);
+  const itemsWithEmbedding = items.filter(item => isNumberArray(item.embedding));
   const matches: unknown[] = [];
 
   for (const item of itemsWithEmbedding) {
@@ -195,22 +211,28 @@ export async function searchKnowledgeByEmbedding(
   const queryEmbedding = await getEmbedding(queryText, module);
   if (!queryEmbedding) return [];
 
-  const allKnowledge = await prisma.knowledgeBase.findMany({
-    select: {
-      id: true,
-      project: true,
-      manifestation: true,
-      pairingEffect: true,
-      symptom: true,
-      pairingItem: true,
-      pairingReason: true,
-      carePlan: true,
-      effectEstimation: true,
-      embedding: true,
-    },
-  });
+  if (!isCacheValid(knowledgeCache)) {
+    knowledgeCache = {
+      data: await prisma.knowledgeBase.findMany({
+        select: {
+          id: true,
+          project: true,
+          manifestation: true,
+          pairingEffect: true,
+          symptom: true,
+          pairingItem: true,
+          pairingReason: true,
+          carePlan: true,
+          effectEstimation: true,
+          embedding: true,
+        },
+      }),
+      timestamp: Date.now(),
+    };
+  }
 
-  return searchByEmbedding(queryEmbedding, allKnowledge, (item, similarity) => ({
+  const cacheData = knowledgeCache?.data || [];
+  return searchByEmbedding(queryEmbedding, cacheData, (item, similarity) => ({
     id: item.id,
     project: item.project,
     manifestation: item.manifestation,
@@ -302,22 +324,28 @@ async function searchProductsByEmbedding(
   topK: number = 5,
   minSimilarity: number = 0.5
 ): Promise<ProductMatch[]> {
-  const allProducts = await prisma.product.findMany({
-    select: {
-      id: true,
-      category: true,
-      name: true,
-      spec: true,
-      price: true,
-      ingredients: true,
-      effects: true,
-      targetAudience: true,
-      usage: true,
-      embedding: true,
-    },
-  });
+  if (!isCacheValid(productCache)) {
+    productCache = {
+      data: await prisma.product.findMany({
+        select: {
+          id: true,
+          category: true,
+          name: true,
+          spec: true,
+          price: true,
+          ingredients: true,
+          effects: true,
+          targetAudience: true,
+          usage: true,
+          embedding: true,
+        },
+      }),
+      timestamp: Date.now(),
+    };
+  }
 
-  return searchByEmbedding(queryEmbedding, allProducts, (item, similarity) => ({
+  const productCacheData = productCache?.data || [];
+  return searchByEmbedding(queryEmbedding, productCacheData, (item, similarity) => ({
     type: 'product' as const,
     id: item.id,
     category: item.category,
@@ -337,18 +365,24 @@ async function searchHealthPlansByEmbedding(
   topK: number = 5,
   minSimilarity: number = 0.5
 ): Promise<HealthPlanMatch[]> {
-  const allPlans = await prisma.healthPlan.findMany({
-    select: {
-      id: true,
-      type: true,
-      targetAudience: true,
-      productCombo: true,
-      usage: true,
-      embedding: true,
-    },
-  });
+  if (!isCacheValid(healthPlanCache)) {
+    healthPlanCache = {
+      data: await prisma.healthPlan.findMany({
+        select: {
+          id: true,
+          type: true,
+          targetAudience: true,
+          productCombo: true,
+          usage: true,
+          embedding: true,
+        },
+      }),
+      timestamp: Date.now(),
+    };
+  }
 
-  return searchByEmbedding(queryEmbedding, allPlans, (item, similarity) => ({
+  const healthPlanCacheData = healthPlanCache?.data || [];
+  return searchByEmbedding(queryEmbedding, healthPlanCacheData, (item, similarity) => ({
     type: 'healthPlan' as const,
     id: item.id,
     typeField: item.type,
@@ -368,21 +402,27 @@ export async function searchMenstrualKnowledgeByEmbedding(
   const queryEmbedding = await getEmbedding(queryText, module);
   if (!queryEmbedding) return [];
 
-  const allKnowledge = await prisma.menstrualKnowledgeBase.findMany({
-    select: {
-      id: true,
-      category: true,
-      symptom: true,
-      cause: true,
-      suggestion: true,
-      dietAdvice: true,
-      lifestyleAdvice: true,
-      attention: true,
-      embedding: true,
-    },
-  });
+  if (!isCacheValid(menstrualKnowledgeCache)) {
+    menstrualKnowledgeCache = {
+      data: await prisma.menstrualKnowledgeBase.findMany({
+        select: {
+          id: true,
+          category: true,
+          symptom: true,
+          cause: true,
+          suggestion: true,
+          dietAdvice: true,
+          lifestyleAdvice: true,
+          attention: true,
+          embedding: true,
+        },
+      }),
+      timestamp: Date.now(),
+    };
+  }
 
-  const knowledgeMatches = await searchByEmbedding(queryEmbedding, allKnowledge, (item, similarity) => ({
+  const menstrualCacheData = menstrualKnowledgeCache?.data || [];
+  const knowledgeMatches = await searchByEmbedding(queryEmbedding, menstrualCacheData, (item, similarity) => ({
     type: 'knowledge' as const,
     id: item.id,
     category: item.category,

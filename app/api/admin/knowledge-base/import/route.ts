@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import * as XLSX from 'xlsx';
+import { requireAdmin, handleAuthError } from '@/lib/auth';
 
 interface KnowledgeRow {
   project: string;
@@ -13,6 +14,10 @@ interface KnowledgeRow {
   effectEstimation: string;
 }
 
+const MAX_FILE_SIZE = 10 * 1024 * 1024;
+const MAX_ROWS = 1000;
+const MAX_COLS = 50;
+
 function parseRows(rows: any[][]): KnowledgeRow[] {
   if (rows.length < 2) return [];
 
@@ -21,13 +26,17 @@ function parseRows(rows: any[][]): KnowledgeRow[] {
     return s;
   });
 
+  if (headers.length > MAX_COLS) {
+    return [];
+  }
+
   const isEnglishHeader = headers.some((h: string) =>
     /project|manifestation|symptom|pairing/i.test(h)
   );
 
   const dataList: KnowledgeRow[] = [];
 
-  for (let i = 1; i < rows.length; i++) {
+  for (let i = 1; i < Math.min(rows.length, MAX_ROWS + 1); i++) {
     const rowValues = rows[i] || [];
     if (rowValues.every((v: any) => v == null || String(v).trim() === '')) continue;
 
@@ -104,21 +113,15 @@ function parseCSVContent(content: string): KnowledgeRow[] {
   };
 
   const rows: string[][] = lines.map(parseCSVLine);
-  return parseRows(rows);
-}
-
-function isExcelFile(file: File): boolean {
-  const name = (file.name || '').toLowerCase();
-  return (
-    name.endsWith('.xlsx') ||
-    name.endsWith('.xls') ||
-    name.endsWith('.xlsm') ||
-    name.endsWith('.csv')
-  );
+  if (rows.length > 0 && rows[0].length > MAX_COLS) {
+    return [];
+  }
+  return parseRows(rows.slice(0, MAX_ROWS + 1));
 }
 
 export async function POST(request: Request) {
   try {
+    await requireAdmin();
     const contentType = request.headers.get('content-type') || '';
 
     let parsedData: KnowledgeRow[] = [];
@@ -129,6 +132,13 @@ export async function POST(request: Request) {
       if (!file) {
         return NextResponse.json(
           { error: '未找到上传文件' },
+          { status: 400 }
+        );
+      }
+
+      if (file.size > MAX_FILE_SIZE) {
+        return NextResponse.json(
+          { error: `文件大小超过限制，最大允许 ${(MAX_FILE_SIZE / (1024 * 1024)).toFixed(1)} MB` },
           { status: 400 }
         );
       }
@@ -190,10 +200,6 @@ export async function POST(request: Request) {
       message: `成功导入 ${created.count} 条数据`,
     });
   } catch (error) {
-    console.error('Import knowledge base error:', error);
-    return NextResponse.json(
-      { error: '导入失败，请检查文件格式' },
-      { status: 500 }
-    );
+    return handleAuthError(error);
   }
 }

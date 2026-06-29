@@ -1,12 +1,15 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import bcrypt from 'bcryptjs';
+import { requireAdmin, handleAuthError } from '@/lib/auth';
+import { logError } from '@/lib/logger';
 
 export async function GET(request: Request) {
   try {
+    await requireAdmin();
     const { searchParams } = new URL(request.url);
-    const page = parseInt(searchParams.get('page') || '1');
-    const pageSize = parseInt(searchParams.get('pageSize') || '20');
+    const page = Math.max(1, parseInt(searchParams.get('page') || '1'));
+    const pageSize = Math.min(100, Math.max(1, parseInt(searchParams.get('pageSize') || '20')));
     const keyword = searchParams.get('keyword') || '';
     const storeId = searchParams.get('storeId') || '';
     const skip = (page - 1) * pageSize;
@@ -69,18 +72,15 @@ export async function GET(request: Request) {
       pageSize,
     });
   } catch (error) {
-    console.error('Get customers error:', error);
-    return NextResponse.json(
-      { error: '获取客户列表失败' },
-      { status: 500 }
-    );
+    logError('Get customers error', error);
+    return handleAuthError(error);
   }
 }
 
 export async function POST(request: Request) {
   try {
+    await requireAdmin();
     const body = await request.json();
-    console.log('[DEBUG] Create customer request body:', JSON.stringify(body, null, 2));
     
     const {
       name,
@@ -99,14 +99,7 @@ export async function POST(request: Request) {
       weight,
     } = body;
 
-    console.log('[DEBUG] name:', name, 'phone:', phone, 'storeId:', storeId);
-    console.log('[DEBUG] age:', age, 'typeof:', typeof age);
-    console.log('[DEBUG] birthOrder:', birthOrder, 'typeof:', typeof birthOrder);
-    console.log('[DEBUG] height:', height, 'typeof:', typeof height);
-    console.log('[DEBUG] weight:', weight, 'typeof:', typeof weight);
-
     if (!name || !phone || !storeId) {
-      console.error('[ERROR] Validation failed: name/phone/storeId is empty');
       return NextResponse.json(
         { error: '姓名、手机号和门店不能为空' },
         { status: 400 }
@@ -114,11 +107,10 @@ export async function POST(request: Request) {
     }
 
     const existingCustomer = await prisma.customer.findFirst({
-      where: { phone },
+      where: { phone, storeId },
     });
 
     if (existingCustomer) {
-      console.error('[ERROR] Customer already exists with phone:', phone);
       return NextResponse.json(
         { error: '该手机号已存在' },
         { status: 400 }
@@ -144,20 +136,12 @@ export async function POST(request: Request) {
       },
     });
 
-    console.log('[DEBUG] Customer created successfully:', customer.id);
     return NextResponse.json({
       id: customer.id,
       name: customer.name,
     });
   } catch (error) {
-    console.error('[ERROR] Create customer error:', error);
-    if (error instanceof Error) {
-      console.error('[ERROR] Error message:', error.message);
-      console.error('[ERROR] Error stack:', error.stack);
-    }
-    return NextResponse.json(
-      { error: '创建客户失败', detail: error instanceof Error ? error.message : 'unknown' },
-      { status: 500 }
-    );
+    logError('Create customer error', error);
+    return handleAuthError(error);
   }
 }

@@ -1,37 +1,53 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { logOperation } from '@/lib/operation-log';
+import { encrypt } from '@/lib/crypto';
+import { requireAdmin, handleAuthError } from '@/lib/auth';
+
+function sanitizeSettings(settings: any): any {
+  if (!settings) return null;
+  return {
+    id: settings.id,
+    module: settings.module,
+    agentId: settings.agentId,
+    datasetId: settings.datasetId,
+    baseUrl: settings.baseUrl,
+    modelId: settings.modelId,
+    embeddingBaseUrl: settings.embeddingBaseUrl,
+    embeddingModelId: settings.embeddingModelId,
+    hasApiKey: !!settings.apiKey,
+    hasEmbeddingApiKey: !!settings.embeddingApiKey,
+    createdAt: settings.createdAt,
+    updatedAt: settings.updatedAt,
+  };
+}
 
 export async function GET(request: Request) {
   try {
+    await requireAdmin();
     const { searchParams } = new URL(request.url);
     const module = searchParams.get('module');
 
     if (module) {
-      // 查询指定模块
       const settings = await prisma.aiSettings.findUnique({
         where: { module },
       });
-      return NextResponse.json(settings || null);
+      return NextResponse.json(sanitizeSettings(settings));
     }
 
-    // 查询所有模块配置
     const allSettings = await prisma.aiSettings.findMany({
       orderBy: { module: 'asc' },
     });
 
-    return NextResponse.json(allSettings);
+    return NextResponse.json(allSettings.map(sanitizeSettings));
   } catch (error) {
-    console.error('Get ai settings error:', error);
-    return NextResponse.json(
-      { error: '获取AI设置失败' },
-      { status: 500 }
-    );
+    return handleAuthError(error);
   }
 }
 
 export async function PUT(request: Request) {
   try {
+    await requireAdmin();
     const body = await request.json();
     const { 
       module,
@@ -46,16 +62,21 @@ export async function PUT(request: Request) {
       where: { module: moduleId },
     });
 
+    const encryptedApiKey = apiKey ? encrypt(apiKey) : existing?.apiKey;
+    const encryptedEmbeddingApiKey = embeddingApiKey 
+      ? encrypt(embeddingApiKey) 
+      : existing?.embeddingApiKey;
+
     if (existing) {
       settings = await prisma.aiSettings.update({
         where: { module: moduleId },
         data: {
-          apiKey,
+          apiKey: encryptedApiKey,
           agentId,
           datasetId,
           baseUrl,
           modelId,
-          embeddingApiKey,
+          embeddingApiKey: encryptedEmbeddingApiKey,
           embeddingBaseUrl,
           embeddingModelId,
         },
@@ -64,12 +85,12 @@ export async function PUT(request: Request) {
       settings = await prisma.aiSettings.create({
         data: {
           module: moduleId,
-          apiKey,
+          apiKey: encryptedApiKey,
           agentId,
           datasetId,
           baseUrl,
           modelId,
-          embeddingApiKey,
+          embeddingApiKey: encryptedEmbeddingApiKey,
           embeddingBaseUrl,
           embeddingModelId,
         },
@@ -85,12 +106,8 @@ export async function PUT(request: Request) {
       request,
     });
 
-    return NextResponse.json(settings);
+    return NextResponse.json(sanitizeSettings(settings));
   } catch (error) {
-    console.error('Update ai settings error:', error);
-    return NextResponse.json(
-      { error: '更新AI设置失败' },
-      { status: 500 }
-    );
+    return handleAuthError(error);
   }
 }

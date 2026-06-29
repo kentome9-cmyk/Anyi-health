@@ -1,13 +1,27 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import * as XLSX from 'xlsx';
+import { requireAdmin, handleAuthError } from '@/lib/auth';
+
+const MAX_FILE_SIZE = 10 * 1024 * 1024;
+const MAX_ROWS = 1000;
+const MAX_COLS = 20;
 
 export async function POST(request: Request) {
   try {
+    await requireAdmin();
     const formData = await request.formData();
     const file = formData.get('file') as File;
 
     if (!file) {
       return NextResponse.json({ error: '请上传文件' }, { status: 400 });
+    }
+
+    if (file.size > MAX_FILE_SIZE) {
+      return NextResponse.json(
+        { error: `文件大小超过限制，最大允许 ${(MAX_FILE_SIZE / (1024 * 1024)).toFixed(1)} MB` },
+        { status: 400 }
+      );
     }
 
     const extension = file.name.split('.').pop()?.toLowerCase();
@@ -18,20 +32,23 @@ export async function POST(request: Request) {
     let items: any[] = [];
 
     if (extension === 'csv') {
-      // 解析 CSV
       const text = await file.text();
       const lines = text.trim().split('\n');
-      
-      // 跳过表头
+      if (lines.length > MAX_ROWS + 1) {
+        return NextResponse.json(
+          { error: `行数超过限制，最大允许 ${MAX_ROWS} 行` },
+          { status: 400 }
+        );
+      }
+
       for (let i = 1; i < lines.length; i++) {
         const line = lines[i].trim();
         if (!line) continue;
-        
-        // 简单 CSV 解析（处理引号包裹的字段）
+
         const parts: string[] = [];
         let current = '';
         let inQuotes = false;
-        
+
         for (let j = 0; j < line.length; j++) {
           const char = line[j];
           if (char === '"') {
@@ -44,7 +61,14 @@ export async function POST(request: Request) {
           }
         }
         parts.push(current.trim());
-        
+
+        if (parts.length > MAX_COLS) {
+          return NextResponse.json(
+            { error: `列数超过限制，最大允许 ${MAX_COLS} 列` },
+            { status: 400 }
+          );
+        }
+
         if (parts[0] && parts[1]) {
           items.push({
             question: parts[0],
@@ -55,18 +79,28 @@ export async function POST(request: Request) {
         }
       }
     } else {
-      // 解析 Excel（使用 xlsx 库）
       const arrayBuffer = await file.arrayBuffer();
       const buffer = Buffer.from(arrayBuffer);
-      
-      // 动态导入 xlsx
-      const XLSX = require('xlsx');
+
       const workbook = XLSX.read(buffer, { type: 'buffer' });
       const sheetName = workbook.SheetNames[0];
       const sheet = workbook.Sheets[sheetName];
       const data = XLSX.utils.sheet_to_json(sheet, { header: 1 }) as any[][];
-      
-      // 跳过表头，处理数据行
+
+      if (data.length > MAX_ROWS + 1) {
+        return NextResponse.json(
+          { error: `行数超过限制，最大允许 ${MAX_ROWS} 行` },
+          { status: 400 }
+        );
+      }
+
+      if (data.length > 0 && data[0].length > MAX_COLS) {
+        return NextResponse.json(
+          { error: `列数超过限制，最大允许 ${MAX_COLS} 列` },
+          { status: 400 }
+        );
+      }
+
       for (let i = 1; i < data.length; i++) {
         const row = data[i];
         if (row && row[0] && row[1]) {
@@ -84,13 +118,11 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: '未解析到有效数据，请检查文件格式' }, { status: 400 });
     }
 
-    // 限制单次导入数量
     const MAX_IMPORT = 200;
     if (items.length > MAX_IMPORT) {
       return NextResponse.json({ error: `单次导入不超过 ${MAX_IMPORT} 条数据，请分批导入` }, { status: 400 });
     }
 
-    // 批量创建
     const createdItems = await prisma.qaItem.createMany({
       data: items.map((item) => ({
         question: item.question,
@@ -108,7 +140,6 @@ export async function POST(request: Request) {
       total: items.length,
     });
   } catch (error) {
-    console.error('Import QA items error:', error);
-    return NextResponse.json({ error: '导入失败：' + (error as Error).message }, { status: 500 });
+    return handleAuthError(error);
   }
 }

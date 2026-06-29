@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getPromptByType } from '@/lib/prompt';
-import { searchKnowledgeByEmbedding, formatKnowledgeContext } from '@/lib/openai';
+import { searchKnowledgeByEmbedding, formatKnowledgeContext, getOpenAIConfig } from '@/lib/openai';
+import { requireStorePermission, handleAuthError } from '@/lib/auth';
 
 const DEFAULT_SYSTEM_PROMPT =
   '你是一名产后康复健康管理顾问。请严格根据用户输入和后台配置的提示词回答，不要额外增加未被要求的固定章节或项目推荐。';
@@ -20,6 +21,7 @@ interface AIRequestConfig {
 
 export async function POST(request: Request) {
   try {
+    await requireStorePermission('ai_analysis');
     const body = await request.json();
     const { customerId, storeId, messages, reportContent, stream, promptType } = body;
     const type = promptType || 'plan';
@@ -54,11 +56,7 @@ export async function POST(request: Request) {
       success: true,
     });
   } catch (error) {
-    console.error('AI chat error:', error);
-    return NextResponse.json(
-      { error: 'AI分析失败，请稍后重试' },
-      { status: 500 }
-    );
+    return handleAuthError(error);
   }
 }
 
@@ -101,14 +99,13 @@ async function createStreamResponse({
                 reportContent: reportContent || messages[messages.length - 1]?.content || '',
               },
             });
-          } catch (error) {
-            console.error('Save AI analysis record failed:', error);
+          } catch {
+            // ignore
           }
         }
 
         send({ done: true });
-      } catch (error) {
-        console.error('AI stream error:', error);
+      } catch {
         send({ error: 'AI stream failed' });
       } finally {
         controller.close();
@@ -159,15 +156,13 @@ async function getKnowledgeContext(userMessage: string): Promise<string> {
 }
 
 async function buildAIRequest(messages: ChatMessage[], type: string): Promise<AIRequestConfig | null> {
-  const settings = await prisma.aiSettings.findFirst({
-    orderBy: { createdAt: 'desc' },
-  });
+  const config = await getOpenAIConfig('default');
 
-  if (!settings?.apiKey || !settings?.baseUrl || !settings?.modelId) {
+  if (!config) {
     return null;
   }
 
-  const apiUrl = `${settings.baseUrl.replace(/\/$/, '')}/chat/completions`;
+  const apiUrl = `${config.baseUrl.replace(/\/$/, '')}/chat/completions`;
   const systemPrompt = await getAnalysisPrompt(type);
   const userMessage = messages[messages.length - 1]?.content || '';
   const knowledgeContext = await getKnowledgeContext(userMessage);
@@ -175,8 +170,8 @@ async function buildAIRequest(messages: ChatMessage[], type: string): Promise<AI
 
   return {
     apiUrl,
-    apiKey: settings.apiKey,
-    modelId: settings.modelId,
+    apiKey: config.apiKey,
+    modelId: config.modelId,
     messages: finalMessages,
   };
 }
@@ -234,7 +229,7 @@ async function* streamAIReply(messages: ChatMessage[], type: string = 'plan'): A
             const delta = parsed?.choices?.[0]?.delta?.content || '';
             if (delta) yield delta;
           } catch {
-            // Ignore malformed provider chunks.
+            // ignore
           }
         }
       }
@@ -274,8 +269,7 @@ async function generateAIReply(messages: ChatMessage[], type: string = 'plan'): 
     });
 
     if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`AI provider error: ${response.status} ${errorText}`);
+      throw new Error(`AI provider error: ${response.status}`);
     }
 
     const data = await response.json();

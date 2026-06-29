@@ -1,16 +1,18 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { decrypt } from '@/lib/crypto';
+import { requireAdmin, handleAuthError } from '@/lib/auth';
 
 export async function POST(request: Request) {
   try {
+    await requireAdmin();
     const body = await request.json();
-    const { apiType, module = 'default' } = body; // 'reply' | 'embedding'
+    const { apiType, module = 'default' } = body;
 
     let settings = await prisma.aiSettings.findUnique({
       where: { module },
     });
 
-    // 如果指定模块没有配置，尝试使用 default
     if (!settings && module !== 'default') {
       settings = await prisma.aiSettings.findUnique({
         where: { module: 'default' },
@@ -29,20 +31,25 @@ export async function POST(request: Request) {
     let modelId: string;
 
     if (apiType === 'reply') {
-      apiKey = settings.apiKey || '';
+      if (!settings.apiKey) {
+        return NextResponse.json({
+          success: false,
+          message: '答复 API Key 未配置',
+        });
+      }
+      apiKey = decrypt(settings.apiKey);
       baseUrl = settings.baseUrl || '';
       modelId = settings.modelId || '';
     } else {
-      apiKey = settings.embeddingApiKey || '';
+      if (!settings.embeddingApiKey) {
+        return NextResponse.json({
+          success: false,
+          message: '向量 API Key 未配置',
+        });
+      }
+      apiKey = decrypt(settings.embeddingApiKey);
       baseUrl = settings.embeddingBaseUrl || '';
       modelId = settings.embeddingModelId || '';
-    }
-
-    if (!apiKey) {
-      return NextResponse.json({
-        success: false,
-        message: `${apiType === 'reply' ? '答复' : '向量'} API Key 未配置`,
-      });
     }
 
     if (!baseUrl) {
@@ -124,10 +131,6 @@ export async function POST(request: Request) {
       });
     }
   } catch (error) {
-    console.error('Test API error:', error);
-    return NextResponse.json({
-      success: false,
-      message: '测试失败',
-    });
+    return handleAuthError(error);
   }
 }

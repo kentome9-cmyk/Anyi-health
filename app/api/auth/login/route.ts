@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server';
 import { validateAdmin, validateStoreUser, validateCustomer } from '@/services/auth.service';
 import { setAuthCookie } from '@/lib/auth-cookie';
 import { prisma } from '@/lib/prisma';
+import { validateCSRFToken } from '@/lib/csrf';
+import { checkRateLimit, getRateLimitKey } from '@/lib/rate-limiter';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -45,6 +47,28 @@ export async function POST(request: Request) {
   const { ip, userAgent } = getClientInfo(request);
 
   try {
+    if (process.env.NODE_ENV === 'production') {
+      const isValid = await validateCSRFToken(request);
+      if (!isValid) {
+        await recordLoginLog({
+          userType: null,
+          userId: null,
+          userName: null,
+          ip,
+          userAgent,
+          success: false,
+          errorMessage: 'CSRF token invalid',
+        });
+        return NextResponse.json({ error: '请求验证失败' }, { status: 403 });
+      }
+    }
+
+    const rateLimitKey = getRateLimitKey(request);
+    const rateLimitResult = checkRateLimit(rateLimitKey, { windowMs: 60000, max: 10 });
+    if (!rateLimitResult.allowed) {
+      return NextResponse.json({ error: '请求过于频繁，请稍后重试' }, { status: 429 });
+    }
+
     const { phone, password, userType, username } = await request.json();
 
     if (userType === 'admin') {
@@ -136,6 +160,7 @@ export async function POST(request: Request) {
         userType: 'store_user',
         userId: user.id,
         storeId: user.storeId,
+        permissions: user.permissions || undefined,
       });
       await recordLoginLog({
         userType: 'store_user',

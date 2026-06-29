@@ -1,7 +1,9 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { mkdir, writeFile, stat, unlink } from 'fs/promises';
-import { join } from 'path';
+import { mkdir, writeFile, stat, unlink, readFile } from 'fs/promises';
+import { join, resolve } from 'path';
+import crypto from 'crypto';
+import { requireAdmin, handleAuthError } from '@/lib/auth';
 
 interface LearningResource {
   id: string;
@@ -19,8 +21,42 @@ interface LearningResource {
   updatedAt: Date;
 }
 
+const MAX_FILE_SIZE = {
+  pdf: 20 * 1024 * 1024,
+  md: 2 * 1024 * 1024,
+  pptx: 50 * 1024 * 1024,
+  ppt: 50 * 1024 * 1024,
+};
+
+const ALLOWED_EXTENSIONS = ['md', 'pptx', 'ppt', 'pdf'];
+
+const FILE_SIGNATURES: Record<string, Buffer> = {
+  pdf: Buffer.from([0x25, 0x50, 0x44, 0x46]),
+  zip: Buffer.from([0x50, 0x4B, 0x03, 0x04]),
+};
+
+async function verifyFileSignature(file: File, ext: string): Promise<boolean> {
+  if (ext === 'md') return true;
+  
+  const signature = FILE_SIGNATURES[ext] || FILE_SIGNATURES.zip;
+  if (!signature) return true;
+  
+  try {
+    const bytes = await file.slice(0, signature.length).arrayBuffer();
+    const header = Buffer.from(bytes);
+    return header.equals(signature);
+  } catch {
+    return false;
+  }
+}
+
+function sanitizeFileName(name: string): string {
+  return name.replace(/[\\/:*?"<>|\x00-\x1F]/g, '_');
+}
+
 export async function GET(request: Request) {
   try {
+    await requireAdmin();
     const { searchParams } = new URL(request.url);
     const keyword = searchParams.get('keyword') || '';
     const type = searchParams.get('type') || '';
@@ -47,16 +83,13 @@ export async function GET(request: Request) {
 
     return NextResponse.json(list);
   } catch (error) {
-    console.error('Get learning resources error:', error);
-    return NextResponse.json(
-      { error: '获取学习资源失败' },
-      { status: 500 }
-    );
+    return handleAuthError(error);
   }
 }
 
 export async function POST(request: Request) {
   try {
+    await requireAdmin();
     const contentType = request.headers.get('content-type') || '';
 
     if (contentType.includes('multipart/form-data')) {
@@ -93,25 +126,50 @@ export async function POST(request: Request) {
       let pageCount: number | null = null;
 
       if (file) {
-        const uploadDir = join(process.cwd(), 'public', 'uploads', 'learning');
-        await mkdir(uploadDir, { recursive: true });
-
         const fileExt = file.name.split('.').pop()?.toLowerCase();
-        const allowedExts = ['md', 'pptx', 'ppt', 'pdf'];
-        if (!allowedExts.includes(fileExt || '')) {
+        if (!fileExt || !ALLOWED_EXTENSIONS.includes(fileExt)) {
           return NextResponse.json(
             { error: '不支持的文件格式，请上传 .md、.pptx、.ppt 或 .pdf 文件' },
             { status: 400 }
           );
         }
 
-        const fileName = `${Date.now()}-${file.name}`;
-        const fullPath = join(uploadDir, fileName);
-        filePath = `/uploads/learning/${fileName}`;
-        fileSize = formatFileSize(file.size);
+        const maxSize = MAX_FILE_SIZE[fileExt as keyof typeof MAX_FILE_SIZE] || MAX_FILE_SIZE.md;
+        if (file.size > maxSize) {
+          return NextResponse.json(
+            { error: `文件大小超过限制，最大允许 ${(maxSize / (1024 * 1024)).toFixed(1)} MB` },
+            { status: 400 }
+          );
+        }
+
+        if (!(await verifyFileSignature(file, fileExt))) {
+          return NextResponse.json(
+            { error: '文件格式验证失败，请上传真实的文件' },
+            { status: 400 }
+          );
+        }
+
+        const uploadDir = join(process.cwd(), 'public', 'uploads', 'learning');
+        await mkdir(uploadDir, { recursive: true });
+
+        const uuid = crypto.randomUUID();
+        const safeExt = sanitizeFileName(fileExt);
+        const fileName = `${uuid}.${safeExt}`;
+        const fullPath = resolve(uploadDir, fileName);
+
+        const resolvedUploadDir = resolve(uploadDir);
+        if (!fullPath.startsWith(resolvedUploadDir)) {
+          return NextResponse.json(
+            { error: '文件路径无效' },
+            { status: 400 }
+          );
+        }
 
         const bytes = await file.arrayBuffer();
         await writeFile(fullPath, Buffer.from(bytes));
+
+        filePath = `/uploads/learning/${fileName}`;
+        fileSize = formatFileSize(file.size);
 
         if (fileExt === 'pdf') {
           pageCount = await getPdfPageCount(fullPath);
@@ -162,16 +220,13 @@ export async function POST(request: Request) {
       return NextResponse.json(resource);
     }
   } catch (error) {
-    console.error('Create learning resource error:', error);
-    return NextResponse.json(
-      { error: '创建学习资源失败' },
-      { status: 500 }
-    );
+    return handleAuthError(error);
   }
 }
 
 export async function PUT(request: Request) {
   try {
+    await requireAdmin();
     const body = await request.json();
     const action = body.action || '';
 
@@ -198,16 +253,13 @@ export async function PUT(request: Request) {
       { status: 400 }
     );
   } catch (error) {
-    console.error('Update learning resource error:', error);
-    return NextResponse.json(
-      { error: '更新学习资源失败' },
-      { status: 500 }
-    );
+    return handleAuthError(error);
   }
 }
 
 export async function DELETE(request: Request) {
   try {
+    await requireAdmin();
     const body = await request.json();
     const { ids } = body;
 
@@ -223,14 +275,18 @@ export async function DELETE(request: Request) {
       select: { filePath: true },
     });
 
+    const uploadDir = resolve(process.cwd(), 'public', 'uploads', 'learning');
+
     for (const resource of resources) {
       if (resource.filePath) {
-        const fullPath = join(process.cwd(), 'public', resource.filePath);
-        try {
-          await stat(fullPath);
-          await unlink(fullPath);
-        } catch {
-          console.warn(`File not found or cannot delete: ${fullPath}`);
+        const fullPath = resolve(process.cwd(), 'public', resource.filePath);
+        if (fullPath.startsWith(uploadDir)) {
+          try {
+            await stat(fullPath);
+            await unlink(fullPath);
+          } catch {
+            // ignore
+          }
         }
       }
     }
@@ -244,11 +300,7 @@ export async function DELETE(request: Request) {
       message: `成功删除 ${result.count} 条数据`,
     });
   } catch (error) {
-    console.error('Delete learning resources error:', error);
-    return NextResponse.json(
-      { error: '删除学习资源失败' },
-      { status: 500 }
-    );
+    return handleAuthError(error);
   }
 }
 
@@ -260,9 +312,10 @@ function formatFileSize(bytes: number): string {
 
 async function getPdfPageCount(filePath: string): Promise<number | null> {
   try {
-    const data = await stat(filePath);
-    const avgBytesPerPage = 15000;
-    return Math.max(1, Math.round(data.size / avgBytesPerPage));
+    const data = await readFile(filePath);
+    const content = data.toString();
+    const matches = content.match(/\/Type\s*\/Page[^s]/g);
+    return matches ? matches.length : Math.max(1, Math.round(data.length / 15000));
   } catch {
     return null;
   }

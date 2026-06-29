@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getPromptByType, replacePromptVariables } from '@/lib/prompt';
+import { logError, logDebug } from '@/lib/logger';
 
 export async function POST(request: Request) {
   try {
@@ -14,7 +15,6 @@ export async function POST(request: Request) {
       topicCount
     } = body;
 
-    // 获取创作者身份
     let identity = null;
     if (identityId) {
       identity = await prisma.creatorIdentity.findUnique({
@@ -34,7 +34,6 @@ export async function POST(request: Request) {
       );
     }
 
-    // 获取 AI 配置
     const settings = await prisma.aiSettings.findFirst({
       where: {},
       orderBy: { createdAt: 'desc' },
@@ -49,7 +48,6 @@ export async function POST(request: Request) {
 
     const apiUrl = `${settings.baseUrl.replace(/\/$/, '')}/chat/completions`;
 
-    // 获取该门店历史选题标题（用于去重）
     const existingTopics = await prisma.scriptRecord.findMany({
       where: { storeId },
       select: { topicTitle: true },
@@ -59,13 +57,9 @@ export async function POST(request: Request) {
     const existingTopicTitles = existingTopics
       .map(t => t.topicTitle)
       .filter((t): t is string => !!t && t.trim() !== '');
-    console.log('[AI Topics] 历史选题数量:', existingTopicTitles.length);
 
-    // 从 Prompt 表获取选题策划提示词（类型为 "topic"）
     const topicPromptTemplate = await getPromptByType('topic');
-    console.log('[AI Topics] 原始提示词模板:', topicPromptTemplate);
 
-    // 替换提示词中的占位符
     const variables: Record<string, string> = {
       accountStage: accountStage || '不限',
       contentDirection: contentDirection || '不限',
@@ -76,16 +70,13 @@ export async function POST(request: Request) {
       targetAudience: identity.targetAudience,
     };
 
-    // 使用配置的提示词或默认提示词
     let effectiveSystemPrompt: string;
     if (topicPromptTemplate) {
       effectiveSystemPrompt = replacePromptVariables(topicPromptTemplate, variables);
     } else {
       effectiveSystemPrompt = getDefaultPrompt();
     }
-    console.log('[AI Topics] 替换后的 System Prompt:', effectiveSystemPrompt);
 
-    // 构建用户提示词
     const userPrompt = buildUserPrompt({
       contentTrack: identity.contentTrack,
       personaStyle: identity.personaStyle,
@@ -98,7 +89,6 @@ export async function POST(request: Request) {
       topicCount,
       existingTopicTitles,
     });
-    console.log('[AI Topics] 构建的 User Prompt:', userPrompt);
 
     const response = await fetch(apiUrl, {
       method: 'POST',
@@ -122,9 +112,8 @@ export async function POST(request: Request) {
 
     const data = await response.json();
     const content = data.choices?.[0]?.message?.content || '';
-    const reasoning = data.choices?.[0]?.message?.reasoning || data.choices?.[0]?.reasoning || '';
-    console.log('[AI Topics] AI 思考过程:', reasoning);
-    console.log('[AI Topics] AI 原始回复:', content);
+
+    logDebug(`[AI Topics] Generated ${topicCount} topics for store: ${storeId}`);
 
     let topics = parseTopicsFromContent(content, topicCount || 10);
 
@@ -134,7 +123,7 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ topics });
   } catch (error) {
-    console.error('Generate topics error:', error);
+    logError('Generate topics error', error);
     return NextResponse.json(
       { topics: [], error: '生成选题失败' },
       { status: 500 }
@@ -181,7 +170,6 @@ function getDefaultPrompt(): string {
 }
 
 function parseTopicsFromContent(content: string, count: number): any[] {
-  // 标准化字段名（支持中英文）
   function normalizeTopic(topic: any): any {
     return {
       title: topic.title || topic.选题标题 || topic.标题 || topic.topic || '',
@@ -190,7 +178,6 @@ function parseTopicsFromContent(content: string, count: number): any[] {
     };
   }
 
-  // 方法1：尝试从代码块中提取 JSON
   const codeBlockMatch = content.match(/```(?:json)?\s*(\[[\s\S]*?\])\s*```/);
   if (codeBlockMatch) {
     try {
@@ -199,11 +186,10 @@ function parseTopicsFromContent(content: string, count: number): any[] {
         return parsed.map(normalizeTopic).filter(t => t.title).slice(0, count);
       }
     } catch (e) {
-      // JSON 解析失败，继续尝试其他方法
+      // ignore
     }
   }
 
-  // 方法2：直接匹配 JSON 数组
   const jsonMatch = content.match(/\[\s*\{[\s\S]*?\}\s*\]/);
   if (jsonMatch) {
     try {
@@ -212,11 +198,10 @@ function parseTopicsFromContent(content: string, count: number): any[] {
         return parsed.map(normalizeTopic).filter(t => t.title).slice(0, count);
       }
     } catch (e) {
-      // JSON 解析失败
+      // ignore
     }
   }
 
-  // 方法3：逐行解析
   const lines = content.split('\n').filter(line => {
     const trimmed = line.trim();
     return trimmed && !trimmed.startsWith('#') && !trimmed.startsWith('```') && trimmed.length > 5;
@@ -234,7 +219,6 @@ function parseTopicsFromContent(content: string, count: number): any[] {
     }
   }
 
-  // 方法4：如果还是没解析出来，使用行号格式
   if (topics.length === 0) {
     for (let i = 0; i < lines.length && topics.length < count; i++) {
       const line = lines[i].replace(/^\d+[.、:：]\s*/, '').trim();

@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { requireStoreUser, handleAuthError } from '@/lib/auth';
 
 type RouteContext = {
   params: Promise<{ id: string }>;
@@ -10,11 +11,28 @@ export async function GET(
   { params }: RouteContext
 ) {
   try {
+    const { storeId } = await requireStoreUser();
     const { id } = await params;
+    
     const report = await prisma.report.findUnique({
-      where: { id },
+      where: { id, storeId },
       include: {
-        customer: true,
+        customer: {
+          select: {
+            id: true,
+            name: true,
+            phone: true,
+            age: true,
+            storeId: true,
+            postpartumDays: true,
+            deliveryMethod: true,
+            birthOrder: true,
+            allergy: true,
+            hasAbortionHistory: true,
+            height: true,
+            weight: true,
+          },
+        },
         store: { select: { id: true, storeName: true, address: true, contactPhone: true } },
       },
     });
@@ -39,7 +57,6 @@ export async function GET(
       createdAt: report.createdAt,
     });
   } catch (error) {
-    console.error('Get store report error:', error);
-    return NextResponse.json({ error: 'Failed to get report' }, { status: 500 });
+    return handleAuthError(error);
   }
 }

@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getPromptByType } from '@/lib/prompt';
 import { searchMenstrualKnowledgeByEmbedding, formatMenstrualKnowledgeContext, getOpenAIConfig } from '@/lib/openai';
+import { getAuthCookie } from '@/lib/auth-cookie';
 
 const DEFAULT_SYSTEM_PROMPT =
   '你是一名专业的健康养生产品销售顾问。请根据用户的问题，结合提供的产品知识库和调理方案库，给出专业的建议。推荐产品时必须严格从知识库中选择，绝对不能自行创造任何不存在的产品。';
@@ -28,10 +29,11 @@ type ChatMessage = {
 
 export async function POST(request: Request) {
   try {
-    const storeId = request.headers.get('x-store-id');
-    if (!storeId) {
+    const session = await getAuthCookie();
+    if (!session || !session.storeId) {
       return NextResponse.json({ error: '缺少门店ID' }, { status: 401 });
     }
+    const storeId = session.storeId;
 
     const body = await request.json();
     const { message, sessionId, stream } = body;
@@ -76,7 +78,7 @@ export async function POST(request: Request) {
     });
 
     if (stream) {
-      return createStreamResponse(message, targetSessionId, storeId);
+      return createStreamResponse(message, targetSessionId);
     }
 
     const reply = await generateAIReply(message);
@@ -111,7 +113,7 @@ export async function POST(request: Request) {
   }
 }
 
-async function createStreamResponse(message: string, sessionId: string, storeId: string) {
+async function createStreamResponse(message: string, sessionId: string) {
   const encoder = new TextEncoder();
 
   const readable = new ReadableStream({

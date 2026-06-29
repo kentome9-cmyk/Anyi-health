@@ -1,17 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { requireAdmin, handleAuthError } from '@/lib/auth';
+import { logError } from '@/lib/logger';
 
-// 获取所有脚本记录
 export async function GET(request: NextRequest) {
   try {
+    await requireAdmin();
     const { searchParams } = new URL(request.url);
     const storeId = searchParams.get('storeId');
     const type = searchParams.get('type');
     const isRecommended = searchParams.get('isRecommended');
     const minViews = searchParams.get('minViews');
     const keyword = searchParams.get('keyword');
-    const page = parseInt(searchParams.get('page') || '1');
-    const pageSize = parseInt(searchParams.get('pageSize') || '20');
+    const page = Math.max(1, parseInt(searchParams.get('page') || '1'));
+    const pageSize = Math.min(100, Math.max(1, parseInt(searchParams.get('pageSize') || '20')));
 
     const where: any = {};
     
@@ -56,7 +58,7 @@ export async function GET(request: NextRequest) {
       totalPages: Math.ceil(total / pageSize),
     });
   } catch (error) {
-    console.error('Failed to fetch scripts:', error);
-    return NextResponse.json({ error: 'Failed to fetch scripts' }, { status: 500 });
+    logError('Failed to fetch scripts', error);
+    return handleAuthError(error);
   }
 }

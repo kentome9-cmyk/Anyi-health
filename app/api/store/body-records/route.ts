@@ -1,22 +1,21 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { requireStoreUser, handleAuthError } from '@/lib/auth';
 
 export async function GET(request: Request) {
   try {
+    const { storeId } = await requireStoreUser();
     const { searchParams } = new URL(request.url);
-    const page = parseInt(searchParams.get('page') || '1');
-    const pageSize = parseInt(searchParams.get('pageSize') || '20');
+    
+    const page = Math.max(1, Number(searchParams.get('page')) || 1);
+    const pageSize = Math.min(100, Math.max(1, Number(searchParams.get('pageSize')) || 20));
     const customerId = searchParams.get('customerId') || '';
-    const storeId = searchParams.get('storeId') || '';
     const planId = searchParams.get('planId') || '';
     const skip = (page - 1) * pageSize;
 
-    const where: any = {};
+    const where: any = { storeId };
     if (customerId) {
       where.customerId = customerId;
-    }
-    if (storeId) {
-      where.storeId = storeId;
     }
     if (planId) {
       where.planId = planId;
@@ -36,7 +35,7 @@ export async function GET(request: Request) {
       prisma.bodyRecord.count({ where }),
     ]);
 
-    const recordList = records.map((record: typeof records[number]) => ({
+    const recordList = records.map((record) => ({
       id: record.id,
       storeId: record.storeId,
       customerId: record.customerId,
@@ -58,21 +57,16 @@ export async function GET(request: Request) {
       pageSize,
     });
   } catch (error) {
-    console.error('Get store body records error:', error);
-    return NextResponse.json(
-      { error: '获取身体记录列表失败' },
-      { status: 500 }
-    );
+    return handleAuthError(error);
   }
 }
 
 export async function POST(request: Request) {
   try {
+    const { storeId } = await requireStoreUser();
     const body = await request.json();
-    console.log('[DEBUG] Store create body record request body:', JSON.stringify(body, null, 2));
     
     const {
-      storeId,
       customerId,
       planId,
       visitCount,
@@ -81,12 +75,33 @@ export async function POST(request: Request) {
       notes,
     } = body;
 
-    if (!storeId || !customerId || !visitDate) {
-      console.error('[ERROR] Body record validation failed: storeId/customerId/visitDate is empty');
+    if (!customerId || !visitDate) {
       return NextResponse.json(
-        { error: '门店、客户和到店日期不能为空' },
+        { error: '客户和到店日期不能为空' },
         { status: 400 }
       );
+    }
+
+    const customer = await prisma.customer.findFirst({
+      where: { id: customerId, storeId },
+    });
+    if (!customer) {
+      return NextResponse.json(
+        { error: '客户不存在或不属于当前门店' },
+        { status: 400 }
+      );
+    }
+
+    if (planId) {
+      const plan = await prisma.plan.findFirst({
+        where: { id: planId, storeId },
+      });
+      if (!plan) {
+        return NextResponse.json(
+          { error: '方案不存在或不属于当前门店' },
+          { status: 400 }
+        );
+      }
     }
 
     const record = await prisma.bodyRecord.create({
@@ -101,16 +116,8 @@ export async function POST(request: Request) {
       },
     });
 
-    console.log('[DEBUG] Body record created successfully:', record.id);
     return NextResponse.json(record);
   } catch (error) {
-    console.error('[ERROR] Create body record error:', error);
-    if (error instanceof Error) {
-      console.error('[ERROR] Error message:', error.message);
-    }
-    return NextResponse.json(
-      { error: '创建身体记录失败', detail: error instanceof Error ? error.message : 'unknown' },
-      { status: 500 }
-    );
+    return handleAuthError(error);
   }
 }
