@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { User, Lock, Phone, Leaf, ChevronRight } from '@/lib/icons';
 import { useAuthStore } from '@/stores/auth.store';
@@ -32,8 +32,16 @@ export function LoginForm({
   );
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [csrfToken, setCsrfToken] = useState('');
   const router = useRouter();
   const { setAuth } = useAuthStore();
+
+  useEffect(() => {
+    fetch('/api/csrf')
+      .then((res) => res.json())
+      .then((data) => setCsrfToken(data.csrfToken || ''))
+      .catch(() => {});
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -51,9 +59,14 @@ export function LoginForm({
         body.userType = userType;
       }
 
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (csrfToken) {
+        headers['x-csrf-token'] = csrfToken;
+      }
+
       const res = await fetch('/api/auth/login', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify(body),
       });
 

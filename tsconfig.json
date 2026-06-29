@@ -29,14 +29,18 @@
     }
   },
   "include": [
-    "next-env.d.ts",
-    "**/*.ts",
-    "**/*.tsx",
-    ".next/types/**/*.ts",
-    ".next/dev/types/**/*.ts",
-    "**/*.mts"
+    "./**/*.mts",
+    "./.next/types/**/*.ts",
+    "./app/**/*.ts",
+    "./app/**/*.tsx",
+    "./next-env.d.ts",
+    "./prisma/**/*.ts",
+    "./src/**/*.ts",
+    "./src/**/*.tsx",
+    ".next/types/**/*.ts"
   ],
   "exclude": [
-    "node_modules"
+    "./node_modules",
+    "./a-stock-assistant"
   ]
 }
