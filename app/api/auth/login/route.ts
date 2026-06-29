@@ -45,45 +45,95 @@ async function recordLoginLog(params: {
 
 // 检查请求来源是否合法（CSRF 同源检查）
 function isValidOrigin(request: Request): boolean {
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL || '';
-  const allowedHosts: string[] = [];
+  const allowedHosts: Set<string> = new Set();
 
-  if (appUrl) {
-    try {
-      allowedHosts.push(new URL(appUrl).host);
-    } catch {
-      // ignore
+  // 收集所有可能的环境变量配置
+  const envVars = [
+    process.env.NEXT_PUBLIC_APP_URL,
+    process.env.NEXTAUTH_URL,
+    process.env.ALLOWED_ORIGINS,
+    process.env.NEXT_PUBLIC_SITE_URL,
+  ].filter(Boolean) as string[];
+
+  for (const envValue of envVars) {
+    // 支持逗号分隔的多个值
+    for (const v of envValue.split(',')) {
+      const trimmed = v.trim();
+      if (!trimmed) continue;
+      try {
+        allowedHosts.add(new URL(trimmed).host);
+      } catch {
+        allowedHosts.add(trimmed);
+      }
     }
   }
 
-  // 也接受请求的 Host 头（更宽松）
-  const requestHost = request.headers.get('host');
-  if (requestHost) {
-    allowedHosts.push(requestHost);
+  // 从 x-forwarded-host 头获取（Nginx 等反向代理会设置）
+  const xForwardedHost = request.headers.get('x-forwarded-host');
+  if (xForwardedHost) {
+    allowedHosts.add(xForwardedHost.split(',')[0].trim());
   }
 
+  // 从 x-host 头获取
+  const xHost = request.headers.get('x-host');
+  if (xHost) {
+    allowedHosts.add(xHost);
+  }
+
+  // 从 host 头获取（标准情况）
+  const host = request.headers.get('host');
+  if (host) {
+    allowedHosts.add(host);
+  }
+
+  // 从 request.url 中提取（Next.js API Route 中 host 头可能为空）
+  try {
+    const reqUrl = new URL(request.url);
+    if (reqUrl.host) {
+      allowedHosts.add(reqUrl.host);
+    }
+  } catch {
+    // ignore
+  }
+
+  // 提取请求来源
   const origin = request.headers.get('origin');
+  let requestHost = '';
+
   if (origin) {
     try {
-      const originHost = new URL(origin).host;
-      return allowedHosts.includes(originHost);
+      requestHost = new URL(origin).host;
     } catch {
+      return false;
+    }
+  } else {
+    // 没有 origin 头时使用 referer
+    const referer = request.headers.get('referer');
+    if (referer) {
+      try {
+        requestHost = new URL(referer).host;
+      } catch {
+        return false;
+      }
+    } else {
+      // 都没有，无法判断来源
       return false;
     }
   }
 
-  // 跨源请求浏览器会带 Origin；同源请求（如表单提交或部分fetch）会带 Referer
-  const referer = request.headers.get('referer');
-  if (referer) {
-    try {
-      const refererHost = new URL(referer).host;
-      return allowedHosts.includes(refererHost);
-    } catch {
-      return false;
+  // 精确匹配
+  if (allowedHosts.has(requestHost)) {
+    return true;
+  }
+
+  // 宽松匹配：忽略端口号
+  const requestHostname = requestHost.split(':')[0];
+  for (const allowed of allowedHosts) {
+    if (allowed.split(':')[0] === requestHostname) {
+      return true;
     }
   }
 
-  // 都没有则拒绝
   return false;
 }
 
