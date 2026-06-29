@@ -5,6 +5,12 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Phone, Lock, User, Store, Leaf, ChevronRight, CheckCircle } from '@/lib/icons';
 
+function getCookie(name: string): string {
+  if (typeof document === 'undefined') return '';
+  const match = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'));
+  return match ? decodeURIComponent(match[2]) : '';
+}
+
 export default function RegisterPage() {
   const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
@@ -18,10 +24,20 @@ export default function RegisterPage() {
   const router = useRouter();
 
   useEffect(() => {
-    fetch('/api/csrf')
-      .then((res) => res.json())
-      .then((data) => setCsrfToken(data.csrfToken || ''))
-      .catch(() => {});
+    const ensureCsrf = async () => {
+      let token = getCookie('csrf_token');
+      if (!token) {
+        try {
+          const res = await fetch('/api/csrf');
+          const data = await res.json();
+          token = data.csrfToken || '';
+        } catch {
+          token = '';
+        }
+      }
+      setCsrfToken(token);
+    };
+    ensureCsrf();
   }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -36,14 +52,16 @@ export default function RegisterPage() {
 
     setIsLoading(true);
     try {
+      const token = csrfToken || getCookie('csrf_token');
       const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-      if (csrfToken) {
-        headers['x-csrf-token'] = csrfToken;
+      if (token) {
+        headers['x-csrf-token'] = token;
       }
       const res = await fetch('/api/auth/store-register', {
         method: 'POST',
         headers,
         body: JSON.stringify({ phone, password, name, storeName }),
+        credentials: 'include',
       });
       const data = await res.json();
       if (!res.ok) {

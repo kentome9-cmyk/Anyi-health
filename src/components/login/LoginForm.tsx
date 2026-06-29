@@ -16,6 +16,12 @@ interface LoginFormProps {
   footerText?: string;
 }
 
+function getCookie(name: string): string {
+  if (typeof document === 'undefined') return '';
+  const match = document.cookie.match(new RegExp('(^| )' + name + '=([^;]+)'));
+  return match ? decodeURIComponent(match[2]) : '';
+}
+
 export function LoginForm({
   mode: initialMode,
   title,
@@ -37,10 +43,20 @@ export function LoginForm({
   const { setAuth } = useAuthStore();
 
   useEffect(() => {
-    fetch('/api/csrf')
-      .then((res) => res.json())
-      .then((data) => setCsrfToken(data.csrfToken || ''))
-      .catch(() => {});
+    const ensureCsrf = async () => {
+      let token = getCookie('csrf_token');
+      if (!token) {
+        try {
+          const res = await fetch('/api/csrf');
+          const data = await res.json();
+          token = data.csrfToken || '';
+        } catch {
+          token = '';
+        }
+      }
+      setCsrfToken(token);
+    };
+    ensureCsrf();
   }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -59,15 +75,17 @@ export function LoginForm({
         body.userType = userType;
       }
 
+      const token = csrfToken || getCookie('csrf_token');
       const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-      if (csrfToken) {
-        headers['x-csrf-token'] = csrfToken;
+      if (token) {
+        headers['x-csrf-token'] = token;
       }
 
       const res = await fetch('/api/auth/login', {
         method: 'POST',
         headers,
         body: JSON.stringify(body),
+        credentials: 'include',
       });
 
       const data = await res.json();
