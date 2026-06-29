@@ -43,13 +43,60 @@ async function recordLoginLog(params: {
   }
 }
 
+// 检查请求来源是否合法（CSRF 同源检查）
+function isValidOrigin(request: Request): boolean {
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL || '';
+  const allowedHosts: string[] = [];
+
+  if (appUrl) {
+    try {
+      allowedHosts.push(new URL(appUrl).host);
+    } catch {
+      // ignore
+    }
+  }
+
+  // 也接受请求的 Host 头（更宽松）
+  const requestHost = request.headers.get('host');
+  if (requestHost) {
+    allowedHosts.push(requestHost);
+  }
+
+  const origin = request.headers.get('origin');
+  if (origin) {
+    try {
+      const originHost = new URL(origin).host;
+      return allowedHosts.includes(originHost);
+    } catch {
+      return false;
+    }
+  }
+
+  // 跨源请求浏览器会带 Origin；同源请求（如表单提交或部分fetch）会带 Referer
+  const referer = request.headers.get('referer');
+  if (referer) {
+    try {
+      const refererHost = new URL(referer).host;
+      return allowedHosts.includes(refererHost);
+    } catch {
+      return false;
+    }
+  }
+
+  // 都没有则拒绝
+  return false;
+}
+
 export async function POST(request: Request) {
   const { ip, userAgent } = getClientInfo(request);
 
   try {
     if (process.env.NODE_ENV === 'production') {
-      const isValid = await validateCSRFToken(request);
-      if (!isValid) {
+      // 同时支持两种CSRF防护：同源检查 + Double Submit Cookie
+      const originValid = isValidOrigin(request);
+      const csrfValid = await validateCSRFToken(request);
+
+      if (!originValid && !csrfValid) {
         await recordLoginLog({
           userType: null,
           userId: null,
@@ -57,7 +104,7 @@ export async function POST(request: Request) {
           ip,
           userAgent,
           success: false,
-          errorMessage: 'CSRF token invalid',
+          errorMessage: 'CSRF check failed',
         });
         return NextResponse.json({ error: '请求验证失败' }, { status: 403 });
       }

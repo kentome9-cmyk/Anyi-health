@@ -65,6 +65,19 @@ export function LoginForm({
     setIsLoading(true);
 
     try {
+      // 确保CSRF token已准备好
+      let token = csrfToken || getCookie('csrf_token');
+      if (!token) {
+        try {
+          const csrfRes = await fetch('/api/csrf', { credentials: 'include' });
+          const csrfData = await csrfRes.json();
+          token = csrfData.csrfToken || '';
+          setCsrfToken(token);
+        } catch {
+          token = '';
+        }
+      }
+
       const body: Record<string, string> = { password };
 
       if (initialMode === 'admin') {
@@ -75,7 +88,6 @@ export function LoginForm({
         body.userType = userType;
       }
 
-      const token = csrfToken || getCookie('csrf_token');
       const headers: Record<string, string> = { 'Content-Type': 'application/json' };
       if (token) {
         headers['x-csrf-token'] = token;
@@ -91,7 +103,7 @@ export function LoginForm({
       const data = await res.json();
 
       if (!res.ok) {
-        setError(data.error || '登录失败');
+        setError(data.error || `登录失败 (${res.status})`);
         return;
       }
 
@@ -110,8 +122,9 @@ export function LoginForm({
       } else {
         router.push('/customer');
       }
-    } catch {
-      setError('网络错误');
+    } catch (err) {
+      const message = err instanceof Error ? err.message : '未知错误';
+      setError(`网络错误: ${message}`);
     } finally {
       setIsLoading(false);
     }
