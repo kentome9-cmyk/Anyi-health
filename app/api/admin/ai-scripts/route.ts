@@ -107,13 +107,19 @@ export async function POST(request: NextRequest) {
         );
       }
 
+      console.log(`[DEBUG] 开始导入文件: ${file.name}, 大小: ${file.size} bytes`);
+      
       const bytes = await file.arrayBuffer();
       const buffer = Buffer.from(bytes);
       
       const workbook = XLSX.read(buffer, { type: 'buffer' });
       const firstSheetName = workbook.SheetNames[0];
+      console.log(`[DEBUG] 工作表名称: ${firstSheetName}`);
+      
       const worksheet = workbook.Sheets[firstSheetName];
       const data = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+      
+      console.log(`[DEBUG] 解析到 ${data.length} 行数据`);
 
       if (data.length < 2) {
         return NextResponse.json(
@@ -126,11 +132,14 @@ export async function POST(request: NextRequest) {
         String(h).trim()
       );
 
+      console.log(`[DEBUG] 表头: ${JSON.stringify(headers)}`);
+
       const colIndices: Record<string, number> = {};
       const requiredCols = ['编号', '方向', '子类', '内容'];
       
       for (const col of requiredCols) {
         const idx = headers.findIndex(h => h.includes(col));
+        console.log(`[DEBUG] 查找列「${col}」: 索引=${idx}`);
         if (idx === -1) {
           return NextResponse.json(
             { 
@@ -199,6 +208,11 @@ export async function POST(request: NextRequest) {
           logError('Failed to create script record', error);
           skippedCount++;
         }
+      }
+
+      console.log(`[DEBUG] 导入完成: 创建 ${createdItems.length} 条, 跳过 ${skippedCount} 条`);
+      if (skippedCount > 0) {
+        console.log(`[DEBUG] 跳过原因: ${JSON.stringify(skippedReasons.slice(0, 10))}`);
       }
 
       return NextResponse.json({
