@@ -178,7 +178,7 @@ export async function POST(request: NextRequest) {
               topicTitle,
               content,
               isPublic: true,
-            } as any,
+            },
           });
           createdItems.push(item);
         } catch (error) {
