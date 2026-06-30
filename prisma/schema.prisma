@@ -515,7 +515,7 @@ model Topic {
 // ============================================
 model ScriptRecord {
   id              String   @id @default(uuid())
-  storeId         String
+  storeId         String?                        // 允许为空，系统素材无门店
   topicId         String?                        // 关联选题ID
   type            String   @db.VarChar(20)       // original/rewrite/material
   version         Int      @default(1)            // 版本号
@@ -540,7 +540,7 @@ model ScriptRecord {
   createdAt       DateTime @default(now())
 
   // 关联
-  store           Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  store           Store?   @relation(fields: [storeId], references: [id], onDelete: Cascade)
   topic           Topic?   @relation(fields: [topicId], references: [id], onDelete: SetNull)
   sourceMaterial  ScriptMaterial? @relation(fields: [sourceMaterialId], references: [id], onDelete: SetNull)
 

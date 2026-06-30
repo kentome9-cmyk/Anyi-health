@@ -170,7 +170,7 @@ export async function POST(request: NextRequest) {
         try {
           const item = await prisma.scriptRecord.create({
             data: {
-              storeId: 'SYSTEM',
+              storeId: null,
               type: 'material',
               number,
               direction,
@@ -178,7 +178,7 @@ export async function POST(request: NextRequest) {
               topicTitle,
               content,
               isPublic: true,
-            },
+            } as any,
           });
           createdItems.push(item);
         } catch (error) {
