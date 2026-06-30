@@ -79,6 +79,7 @@ export async function POST(request: NextRequest) {
   try {
     await requireAdmin();
     const contentType = request.headers.get('content-type') || '';
+    console.log(`[DEBUG] POST /api/admin/ai-scripts, contentType: ${contentType}`);
 
     if (contentType.includes('multipart/form-data')) {
       const formData = await request.formData();
