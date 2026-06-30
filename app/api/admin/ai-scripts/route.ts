@@ -123,17 +123,20 @@ export async function POST(request: NextRequest) {
       }
 
       const headers = (data[0] as any[]).map((h: any) => 
-        String(h).trim().toLowerCase()
+        String(h).trim()
       );
 
       const colIndices: Record<string, number> = {};
       const requiredCols = ['编号', '方向', '子类', '内容'];
       
       for (const col of requiredCols) {
-        const idx = headers.findIndex(h => h.includes(col.toLowerCase()));
+        const idx = headers.findIndex(h => h.includes(col));
         if (idx === -1) {
           return NextResponse.json(
-            { error: `缺少必需列「${col}」，请检查文件表头` },
+            { 
+              error: `缺少必需列「${col}」，请检查文件表头`,
+              availableHeaders: headers,
+            },
             { status: 400 }
           );
         }
@@ -142,7 +145,7 @@ export async function POST(request: NextRequest) {
 
       const optionalCols: Record<string, number> = {};
       ['标题'].forEach(col => {
-        const idx = headers.findIndex(h => h.includes(col.toLowerCase()));
+        const idx = headers.findIndex(h => h.includes(col));
         if (idx !== -1) {
           optionalCols[col] = idx;
         }
@@ -150,10 +153,15 @@ export async function POST(request: NextRequest) {
 
       const createdItems: any[] = [];
       let skippedCount = 0;
+      const skippedReasons: string[] = [];
 
       for (let i = 1; i < data.length; i++) {
         const row = data[i] as any[];
-        if (!row || row.length === 0) continue;
+        if (!row || row.length === 0) {
+          skippedCount++;
+          skippedReasons.push(`第${i+1}行: 空行`);
+          continue;
+        }
 
         const number = String(row[colIndices['编号']] || '').trim();
         const direction = String(row[colIndices['方向']] || '').trim();
@@ -162,6 +170,12 @@ export async function POST(request: NextRequest) {
 
         if (!number || !direction || !subCategory || !content) {
           skippedCount++;
+          const missing = [];
+          if (!number) missing.push('编号');
+          if (!direction) missing.push('方向');
+          if (!subCategory) missing.push('子类');
+          if (!content) missing.push('内容');
+          skippedReasons.push(`第${i+1}行: 缺少${missing.join('、')}`);
           continue;
         }
 
@@ -191,6 +205,7 @@ export async function POST(request: NextRequest) {
         success: true,
         created: createdItems.length,
         skipped: skippedCount,
+        skippedReasons: skippedReasons.slice(0, 20),
         message: `成功导入 ${createdItems.length} 条脚本，跳过 ${skippedCount} 条无效数据`,
       });
     }
