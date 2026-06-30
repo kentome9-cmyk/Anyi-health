@@ -4,11 +4,14 @@ import { requireAdmin, handleAuthError } from '@/lib/auth';
 import { logError } from '@/lib/logger';
 
 // 更新脚本推荐状态
-export async function PUT(request: NextRequest) {
+export async function PUT(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
   try {
     await requireAdmin();
     const { searchParams } = new URL(request.url);
-    const id = searchParams.get('id');
+    const { id } = await params;
     const action = searchParams.get('action');
 
     if (!id) {
@@ -70,11 +73,13 @@ export async function PUT(request: NextRequest) {
 }
 
 // 删除脚本
-export async function DELETE(request: NextRequest) {
+export async function DELETE(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
   try {
     await requireAdmin();
-    const { searchParams } = new URL(request.url);
-    const id = searchParams.get('id');
+    const { id } = await params;
 
     if (!id) {
       return NextResponse.json({ error: 'Script ID is required' }, { status: 400 });

@@ -58,7 +58,8 @@ export function extractTopicDirection(content: string): { summary: string; angle
 
 export function extractScriptContent(content: string): string {
   try {
-    const json = JSON.parse(content);
+    const jsonStr = cleanJsonString(content);
+    const json = JSON.parse(jsonStr);
     return json.script || json.rewrittenScript || content;
   } catch {
     return content;

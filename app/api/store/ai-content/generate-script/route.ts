@@ -16,6 +16,8 @@ export async function POST(request: Request) {
       templateName,
       templatePrompt,
       identity,
+      direction,
+      subCategory,
     } = body;
 
     if (!identity || !identity.contentTrack || !identity.personaStyle || !identity.targetAudience) {
@@ -25,7 +27,7 @@ export async function POST(request: Request) {
       );
     }
 
-    const config = await getOpenAIConfig();
+    const config = await getOpenAIConfig('content');
     if (!config) {
       return NextResponse.json(
         { content: '', error: 'AI 未配置' },

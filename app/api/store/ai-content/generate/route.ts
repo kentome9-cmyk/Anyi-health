@@ -29,7 +29,7 @@ export async function POST(request: Request) {
     }
 
     // 获取 AI 配置
-    const config = await getOpenAIConfig();
+    const config = await getOpenAIConfig('content');
     if (!config) {
       return NextResponse.json({ error: 'AI 未配置' }, { status: 500 });
     }

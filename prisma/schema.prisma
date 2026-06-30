@@ -493,6 +493,7 @@ model Topic {
   summary         String?  @db.Text              // 内容摘要
   angle           String?  @db.Text              // 切入角度
   corePoints      String?  @db.Text              // 补充说明/核心观点
+  contentDirection String? @db.VarChar(50)       // 内容方向：教知识/聊观点/讲故事/晒过程
   isRecommended   Boolean  @default(false)        // 是否推荐
   totalViews      Int      @default(0)           // 总播放量（汇总所有版本的脚本）
   totalLikes      Int      @default(0)           // 总点赞量
@@ -505,6 +506,7 @@ model Topic {
 
   @@index([storeId])
   @@index([topic])
+  @@index([contentDirection])
   @@map("topic")
 }
 
@@ -515,7 +517,7 @@ model ScriptRecord {
   id              String   @id @default(uuid())
   storeId         String
   topicId         String?                        // 关联选题ID
-  type            String   @db.VarChar(20)       // original/rewrite
+  type            String   @db.VarChar(20)       // original/rewrite/material
   version         Int      @default(1)            // 版本号
   topicTitle      String?  @db.VarChar(255)      // 选题标题（冗余，便于展示）
   summary         String?  @db.Text              // 内容摘要
@@ -532,6 +534,9 @@ model ScriptRecord {
   isFilmed        Boolean  @default(false)        // 是否已拍摄
   isPublic        Boolean  @default(false)        // 是否加入公共脚本库
   sourceMaterialId String?                       // 关联的素材ID（改写来源）
+  number          String?  @db.VarChar(50)        // 编号（素材导入时使用）
+  direction       String?  @db.VarChar(100)       // 方向（素材导入时使用）
+  subCategory     String?  @db.VarChar(100)       // 子类（素材导入时使用）
   createdAt       DateTime @default(now())
 
   // 关联
@@ -545,6 +550,8 @@ model ScriptRecord {
   @@index([isRecommended])
   @@index([isPublic])
   @@index([sourceMaterialId])
+  @@index([direction])
+  @@index([subCategory])
   @@map("script_records")
 }
 
@@ -552,10 +559,13 @@ model ScriptRecord {
 model ScriptMaterial {
   id            String   @id @default(uuid())
   title         String   @db.VarChar(255)        // 素材标题
-  content       String   @db.Text                  // 素材内容（原文）
-  source        String?  @db.VarChar(255)         // 来源（可选，如：抖音某博主、某书某作者）
-  category      String?  @db.VarChar(100)         // 分类（可选）
-  uploadedById  String?                            // 上传者（管理员ID）
+  number        String   @db.VarChar(50)         // 编号
+  direction     String   @db.VarChar(100)        // 方向
+  subCategory   String   @db.VarChar(100)        // 子类
+  content       String   @db.Text                // 素材内容（原文）
+  source        String?  @db.VarChar(255)        // 来源（可选，如：抖音某博主、某书某作者）
+  category      String?  @db.VarChar(100)        // 分类（可选）
+  uploadedById  String?                          // 上传者（管理员ID）
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
@@ -563,6 +573,8 @@ model ScriptMaterial {
   rewrites      ScriptRecord[]
 
   @@index([category])
+  @@index([direction])
+  @@index([subCategory])
   @@index([uploadedById])
   @@map("script_materials")
 }

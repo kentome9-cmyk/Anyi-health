@@ -44,7 +44,10 @@ export async function POST(request: Request) {
       corePoints,
       sourceContent, 
       templateName, 
-      content 
+      content,
+      direction,
+      subCategory,
+      contentDirection,
     } = body;
 
     if (!storeId) {
@@ -83,6 +86,7 @@ export async function POST(request: Request) {
             summary: summary || null,
             angle: angle || null,
             corePoints: corePoints || null,
+            contentDirection: contentDirection || null,
           },
         });
         finalTopicId = newTopic.id;
@@ -110,6 +114,8 @@ export async function POST(request: Request) {
         sourceContent: sourceContent || null,
         templateName: templateName || null,
         content,
+        direction: direction || null,
+        subCategory: subCategory || null,
       },
     });
 

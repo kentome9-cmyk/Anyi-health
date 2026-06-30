@@ -3,7 +3,6 @@ import { prisma } from '@/lib/prisma';
 import { requireAdmin, handleAuthError } from '@/lib/auth';
 import { logError } from '@/lib/logger';
 
-// 获取单个素材
 export async function GET(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -44,7 +43,6 @@ export async function GET(
   }
 }
 
-// 更新素材
 export async function PUT(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -53,23 +51,50 @@ export async function PUT(
     await requireAdmin();
     const { id } = await params;
     const body = await request.json();
-    const { title, content, source, category } = body;
+    const { title, content, source, category, number, direction, subCategory } = body;
 
-    if (title !== undefined && !title) {
-      return NextResponse.json({ error: '标题不能为空' }, { status: 400 });
+    const updateData: any = {};
+    
+    if (title !== undefined) {
+      if (!title) {
+        return NextResponse.json({ error: '标题不能为空' }, { status: 400 });
+      }
+      updateData.title = title;
     }
-    if (content !== undefined && !content) {
-      return NextResponse.json({ error: '内容不能为空' }, { status: 400 });
+    if (content !== undefined) {
+      if (!content) {
+        return NextResponse.json({ error: '内容不能为空' }, { status: 400 });
+      }
+      updateData.content = content;
+    }
+    if (number !== undefined) {
+      if (!number) {
+        return NextResponse.json({ error: '编号不能为空' }, { status: 400 });
+      }
+      updateData.number = number;
+    }
+    if (direction !== undefined) {
+      if (!direction) {
+        return NextResponse.json({ error: '方向不能为空' }, { status: 400 });
+      }
+      updateData.direction = direction;
+    }
+    if (subCategory !== undefined) {
+      if (!subCategory) {
+        return NextResponse.json({ error: '子类不能为空' }, { status: 400 });
+      }
+      updateData.subCategory = subCategory;
+    }
+    if (source !== undefined) {
+      updateData.source = source || null;
+    }
+    if (category !== undefined) {
+      updateData.category = category || null;
     }
 
     const item = await prisma.scriptMaterial.update({
       where: { id },
-      data: {
-        ...(title !== undefined ? { title } : {}),
-        ...(content !== undefined ? { content } : {}),
-        ...(source !== undefined ? { source: source || null } : {}),
-        ...(category !== undefined ? { category: category || null } : {}),
-      },
+      data: updateData,
     });
 
     return NextResponse.json({ item });
@@ -79,7 +104,6 @@ export async function PUT(
   }
 }
 
-// 删除素材
 export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }

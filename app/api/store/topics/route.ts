@@ -28,7 +28,7 @@ export async function POST(request: Request) {
   try {
     const { storeId } = await requireStoreUser();
     const body = await request.json();
-    const { topic, summary, angle, corePoints } = body;
+    const { topic, summary, angle, corePoints, contentDirection } = body;
 
     if (!topic) {
       return NextResponse.json({ error: '缺少必要参数' }, { status: 400 });
@@ -52,6 +52,7 @@ export async function POST(request: Request) {
         summary: summary || null,
         angle: angle || null,
         corePoints: corePoints || null,
+        contentDirection: contentDirection || null,
       },
     });
 

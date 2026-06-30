@@ -11,7 +11,6 @@ import {
   ArrowLeft,
   Presentation,
   Loader2,
-  Download,
   ChevronLeft,
   ChevronRight,
   ZoomIn,
@@ -19,6 +18,7 @@ import {
   Maximize2,
   Minimize2,
   RotateCcw,
+  Download,
 } from '@/lib/icons';
 import type { PdfViewerRef } from './PdfViewer';
 import ReactMarkdown from 'react-markdown';
@@ -337,18 +337,6 @@ export default function LearningResourceDetailPage() {
                   </Button>
 
                   <div className="w-px h-5 bg-gray-200" />
-
-                  {/* 下载 */}
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => pdfRef.current?.handleDownload(resource.title)}
-                    className="h-7 px-2 text-xs"
-                    title="下载"
-                  >
-                    <Download className="h-3.5 w-3.5 mr-1" />
-                    下载
-                  </Button>
 
                   {/* 全屏 */}
                   <Button

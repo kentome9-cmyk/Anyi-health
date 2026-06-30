@@ -434,17 +434,18 @@ export default function PlanPreviewPage() {
             background: white;
             -webkit-print-color-adjust: exact;
             print-color-adjust: exact;
-            overflow: hidden !important;
+            overflow: visible !important;
             width: 100% !important;
             height: auto !important;
           }
           body > * {
-            overflow: hidden !important;
+            overflow: visible !important;
           }
           * {
             -webkit-print-color-adjust: exact;
             print-color-adjust: exact;
             overflow: visible !important;
+            max-height: none !important;
           }
           ::-webkit-scrollbar {
             display: none !important;
@@ -453,17 +454,12 @@ export default function PlanPreviewPage() {
             width: 100% !important;
             max-width: 100% !important;
             min-height: auto !important;
+            height: auto !important;
             padding: 0 !important;
             margin: 0 !important;
             box-shadow: none !important;
             box-sizing: border-box;
             overflow: visible !important;
-          }
-          .a4-paper > * + * {
-            margin-top: 3mm;
-          }
-          .a4-paper > :first-child {
-            margin-top: 0;
           }
         }
       `}</style>
@@ -503,7 +499,7 @@ export default function PlanPreviewPage() {
 
       <div
         className="a4-paper bg-white mx-auto shadow-lg print:shadow-none print:mx-0 print:my-0 print:w-full print:max-w-none print:border-0"
-        style={{ width: '210mm', minHeight: '297mm', padding: '40px', maxWidth: '210mm' }}
+        style={{ width: '210mm', padding: '40px', maxWidth: '210mm' }}
       >
         {/* 文档头部 */}
         <div className="flex justify-between items-center pb-6 mb-6 border-b border-gray-200" style={{ borderBottomWidth: '1px' }}>

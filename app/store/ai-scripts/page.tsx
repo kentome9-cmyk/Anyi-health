@@ -6,6 +6,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Badge } from '@/components/ui/badge';
 import {
   Table,
   TableBody,
@@ -20,13 +21,20 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { FileText, Copy, CheckCheck, Search, Send, Pencil, RefreshCw, BookOpen } from '@/lib/icons';
 import { useAuthStore } from '@/stores/auth.store';
-import { extractScriptMetadata, getScriptTextToCopy, extractTopicDirection } from '@/lib/script-utils';
+import { extractScriptMetadata, getScriptTextToCopy, extractScriptContent } from '@/lib/script-utils';
 
 interface ScriptRecord {
   id: string;
-  type: 'original' | 'rewrite';
+  type: 'original' | 'rewrite' | 'material';
   topicId?: string;
   version: number;
   topicTitle?: string;
@@ -41,6 +49,11 @@ interface ScriptRecord {
   favoriteCount: number;
   commentCount: number;
   isFilmed?: boolean;
+  isRecommended?: boolean;
+  isPublic?: boolean;
+  number?: string;
+  direction?: string;
+  subCategory?: string;
   createdAt: string;
   storeId?: string;
 }
@@ -86,7 +99,9 @@ export default function StoreAIScriptsPage() {
 
   const loadPublicScripts = async () => {
     try {
-      const res = await fetch('/api/store/ai-scripts/public');
+      const params = new URLSearchParams();
+      if (searchKeyword) params.set('keyword', searchKeyword);
+      const res = await fetch(`/api/store/ai-scripts/public?${params}`);
       const data = await res.json();
       setPublicScripts(data.scripts || []);
     } catch (error) {
@@ -131,7 +146,6 @@ export default function StoreAIScriptsPage() {
       ...prev,
       [id]: { ...prev[id], [field]: numValue }
     }));
-    // 同时更新脚本列表中的显示
     const updateScript = (list: ScriptRecord[]) => list.map(s => 
       s.id === id ? { ...s, [field]: numValue } : s
     );
@@ -148,7 +162,6 @@ export default function StoreAIScriptsPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(stats),
       });
-      // 清除编辑状态
       setEditingStats(prev => {
         const newState = { ...prev };
         delete newState[id];
@@ -159,25 +172,47 @@ export default function StoreAIScriptsPage() {
     }
   };
 
-
-
   const formatDate = (dateStr: string) => {
     const date = new Date(dateStr);
     return date.toLocaleString('zh-CN', { month: '2-digit', day: '2-digit' });
+  };
+
+  const formatDateLong = (dateStr: string) => {
+    const date = new Date(dateStr);
+    return date.toLocaleString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
+  };
+
+  const getTypeBadge = (type: string) => {
+    switch (type) {
+      case 'original':
+        return <Badge variant="default" className="text-xs">原创</Badge>;
+      case 'rewrite':
+        return <Badge variant="secondary" className="text-xs">仿写</Badge>;
+      case 'material':
+        return <Badge className="bg-green-100 text-green-700 text-xs">素材</Badge>;
+      default:
+        return <Badge variant="outline" className="text-xs">{type}</Badge>;
+    }
   };
 
   const filteredScripts = scripts.filter(script => {
     return searchKeyword === '' ||
       script.topicTitle?.includes(searchKeyword) ||
       script.corePoints?.includes(searchKeyword) ||
-      script.content.includes(searchKeyword);
+      script.content.includes(searchKeyword) ||
+      script.number?.includes(searchKeyword) ||
+      script.direction?.includes(searchKeyword) ||
+      script.subCategory?.includes(searchKeyword);
   });
 
   const filteredPublicScripts = publicScripts.filter(script => {
     return searchKeyword === '' ||
       script.topicTitle?.includes(searchKeyword) ||
       script.corePoints?.includes(searchKeyword) ||
-      script.content.includes(searchKeyword);
+      script.content.includes(searchKeyword) ||
+      script.number?.includes(searchKeyword) ||
+      script.direction?.includes(searchKeyword) ||
+      script.subCategory?.includes(searchKeyword);
   });
 
   const renderMyScriptsTable = (scriptList: ScriptRecord[]) => (
@@ -185,9 +220,9 @@ export default function StoreAIScriptsPage() {
       <TableHeader>
         <TableRow>
           <TableHead className="w-[70px] text-center">日期</TableHead>
-          <TableHead className="w-[50px] text-center">版本</TableHead>
-          <TableHead className="w-[70px] text-center">类型</TableHead>
-          <TableHead className="w-[120px] text-center">选题</TableHead>
+          <TableHead className="text-center">方向</TableHead>
+          <TableHead className="text-center">子类</TableHead>
+          <TableHead className="text-center">选题</TableHead>
           <TableHead className="w-[80px] text-center">播放</TableHead>
           <TableHead className="w-[80px] text-center">点赞</TableHead>
           <TableHead className="w-[120px] text-center">操作</TableHead>
@@ -206,17 +241,21 @@ export default function StoreAIScriptsPage() {
                 </div>
               </TableCell>
               <TableCell className="text-center">
-                <span className="text-xs font-medium text-gray-700">v{script.version || 1}</span>
+                {script.direction ? (
+                  <Badge variant="outline" className="text-xs">{script.direction}</Badge>
+                ) : (
+                  '-'
+                )}
               </TableCell>
               <TableCell className="text-center">
-                <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium ${
-                  script.type === 'rewrite' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'
-                }`}>
-                  {script.type === 'rewrite' ? '改写' : '原创'}
-                </span>
+                {script.subCategory ? (
+                  <Badge className="text-xs bg-green-100 text-green-700">{script.subCategory}</Badge>
+                ) : (
+                  '-'
+                )}
               </TableCell>
               <TableCell>
-                <div className="text-xs font-medium truncate max-w-[110px] text-center" title={script.topicTitle || '无标题'}>
+                <div className="text-xs font-medium truncate text-center" title={script.topicTitle || '无标题'}>
                   {script.topicTitle || '无标题'}
                 </div>
               </TableCell>
@@ -276,86 +315,59 @@ export default function StoreAIScriptsPage() {
     <Table>
       <TableHeader>
         <TableRow>
-          <TableHead className="w-[70px] text-center">日期</TableHead>
-          <TableHead className="w-[50px] text-center">版本</TableHead>
-          <TableHead className="w-[70px] text-center">类型</TableHead>
-          <TableHead className="w-[120px] text-center">选题</TableHead>
-          <TableHead className="w-[80px] text-center">播放</TableHead>
-          <TableHead className="w-[80px] text-center">点赞</TableHead>
-          <TableHead className="w-[120px] text-center">操作</TableHead>
+          <TableHead className="w-[100px] text-center">方向</TableHead>
+          <TableHead className="w-[100px] text-center">子类</TableHead>
+          <TableHead className="w-[50px] text-center">来源</TableHead>
+          <TableHead className="flex-1 text-center">选题</TableHead>
+          <TableHead className="w-[100px] text-center">操作</TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
         {scriptList.map((script) => {
+          const isOwnRecommended = script.isRecommended && script.storeId === storeId;
+          const scriptContent = extractScriptContent(script.content);
           return (
-            <TableRow key={script.id}>
+            <TableRow key={script.id} className={isOwnRecommended ? 'bg-green-50/50' : ''}>
               <TableCell className="text-center">
-                <div className="flex items-center justify-center gap-1">
-                  <span className={`w-2 h-2 rounded-full ${script.isFilmed ? 'bg-green-500' : 'bg-gray-300'}`} title={script.isFilmed ? '已拍摄' : '未拍摄'} />
-                  <span className="text-xs text-gray-500">
-                    {formatDate(script.createdAt)}
+                {script.direction ? (
+                  <Badge variant="outline" className="text-xs">{script.direction}</Badge>
+                ) : (
+                  '-'
+                )}
+              </TableCell>
+              <TableCell className="text-center">
+                {script.subCategory ? (
+                  <Badge className="text-xs bg-green-100 text-green-700">{script.subCategory}</Badge>
+                ) : (
+                  '-'
+                )}
+              </TableCell>
+              <TableCell className="text-center">
+                {isOwnRecommended ? (
+                  <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-yellow-100 text-yellow-700" title="本店推荐">
+                    推荐
                   </span>
-                </div>
-              </TableCell>
-              <TableCell className="text-center">
-                <span className="text-xs font-medium text-gray-700">v{script.version || 1}</span>
-              </TableCell>
-              <TableCell className="text-center">
-                <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium ${
-                  script.type === 'rewrite' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700'
-                }`}>
-                  {script.type === 'rewrite' ? '改写' : '原创'}
-                </span>
+                ) : script.isPublic ? (
+                  <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-blue-100 text-blue-700" title="公共脚本库">
+                    公共
+                  </span>
+                ) : null}
               </TableCell>
               <TableCell>
-                <div className="text-xs font-medium truncate max-w-[110px] text-center" title={script.topicTitle || '无标题'}>
+                <div className="text-xs font-medium truncate" title={script.topicTitle || '无标题'}>
                   {script.topicTitle || '无标题'}
                 </div>
               </TableCell>
               <TableCell className="text-center">
-                <input
-                  type="number"
-                  min="0"
-                  value={script.viewCount || ''}
-                  onChange={(e) => handleStatsChange(script.id, 'viewCount', e.target.value)}
-                  onBlur={() => handleStatsBlur(script.id)}
-                  disabled={!script.isFilmed}
-                  className={`w-16 text-xs text-center border rounded px-1 py-0.5 ${!script.isFilmed ? 'border-gray-100 bg-gray-50 text-gray-400 cursor-not-allowed' : 'border-gray-200'}`}
-                  placeholder="—"
-                />
-              </TableCell>
-              <TableCell className="text-center">
-                <input
-                  type="number"
-                  min="0"
-                  value={script.likeCount || ''}
-                  onChange={(e) => handleStatsChange(script.id, 'likeCount', e.target.value)}
-                  onBlur={() => handleStatsBlur(script.id)}
-                  disabled={!script.isFilmed}
-                  className={`w-16 text-xs text-center border rounded px-1 py-0.5 ${!script.isFilmed ? 'border-gray-100 bg-gray-50 text-gray-400 cursor-not-allowed' : 'border-gray-200'}`}
-                  placeholder="—"
-                />
-              </TableCell>
-              <TableCell className="text-center">
-                <div className="flex gap-1 justify-center">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setSelectedScript(script)}
-                    className="h-7 px-2 text-xs"
-                  >
-                    <FileText className="h-3 w-3 mr-1" />
-                    详情
-                  </Button>
-                  <Button
-                    variant={script.isFilmed ? 'outline' : 'default'}
-                    size="sm"
-                    onClick={() => handleToggleFilmed(script.id, script.isFilmed || false)}
-                    className="h-7 px-2 text-xs"
-                  >
-                    {script.isFilmed ? '取消' : '拍摄'}
-                  </Button>
-                </div>
+                <Button
+                  variant="default"
+                  size="sm"
+                  onClick={() => setSelectedScript(script)}
+                  className="h-7 px-3 text-xs bg-green-600 hover:bg-green-700"
+                >
+                  <Pencil className="h-3 w-3 mr-1" />
+                  去仿写
+                </Button>
               </TableCell>
             </TableRow>
           );
@@ -367,7 +379,6 @@ export default function StoreAIScriptsPage() {
   return (
     <div className="flex-1 overflow-y-auto bg-gray-50">
       <div className="p-4 md:p-6">
-        {/* 页面标题 */}
         <div className="mb-4">
           <h1 className="text-xl font-bold text-gray-900 flex items-center gap-2">
             <FileText className="h-5 w-5 text-green-600" />
@@ -376,7 +387,6 @@ export default function StoreAIScriptsPage() {
           <p className="text-sm text-gray-500 mt-0.5">管理和追踪您的短视频脚本数据</p>
         </div>
 
-        {/* Tab 切换 */}
         <div className="flex gap-1 mb-4 bg-gray-100 p-1 rounded-lg w-fit">
           <button
             onClick={() => setActiveTab('mine')}
@@ -401,23 +411,26 @@ export default function StoreAIScriptsPage() {
           </button>
         </div>
 
-        {/* 搜索栏 */}
         <Card className="mb-4">
           <CardContent className="p-3">
             <div className="flex items-center gap-2">
               <Search className="h-4 w-4 text-gray-400" />
               <input
                 type="text"
-                placeholder="搜索选题或内容..."
+                placeholder="搜索选题、编号、方向、子类、内容..."
                 value={searchKeyword}
-                onChange={e => setSearchKeyword(e.target.value)}
+                onChange={e => {
+                  setSearchKeyword(e.target.value);
+                  if (activeTab === 'public') {
+                    loadPublicScripts();
+                  }
+                }}
                 className="flex-1 text-sm border-0 outline-none bg-transparent"
               />
             </div>
           </CardContent>
         </Card>
 
-        {/* 表格 */}
         <Card>
           <CardContent className="p-0">
             {loading ? (
@@ -449,7 +462,6 @@ export default function StoreAIScriptsPage() {
         </Card>
       </div>
 
-      {/* 查看详情弹窗 */}
       <Dialog open={!!selectedScript} onOpenChange={() => setSelectedScript(null)}>
         <DialogContent className="!max-w-[700px] !w-[95vw] max-h-[80vh] overflow-y-auto">
           <DialogHeader>
@@ -457,9 +469,33 @@ export default function StoreAIScriptsPage() {
           </DialogHeader>
           {selectedScript && (
             <div className="space-y-4">
+              <div className="flex items-center gap-2 flex-wrap">
+                {getTypeBadge(selectedScript.type)}
+                {selectedScript.isRecommended && (
+                  <Badge variant="outline" className="bg-yellow-50 text-yellow-600 border-yellow-200">
+                    已推荐
+                  </Badge>
+                )}
+                {selectedScript.isPublic && (
+                  <Badge variant="outline" className="bg-blue-50 text-blue-600 border-blue-200">
+                    公共
+                  </Badge>
+                )}
+                {selectedScript.number && (
+                  <span className="text-xs font-mono text-gray-500 bg-gray-100 px-2 py-1 rounded">
+                    {selectedScript.number}
+                  </span>
+                )}
+                {selectedScript.direction && (
+                  <Badge variant="outline">{selectedScript.direction}</Badge>
+                )}
+                {selectedScript.subCategory && (
+                  <Badge className="bg-green-100 text-green-700">{selectedScript.subCategory}</Badge>
+                )}
+              </div>
               {selectedScript.topicTitle && (
                 <div>
-                  <Label className="text-xs text-gray-500">选题</Label>
+                  <Label className="text-xs text-gray-500">选题/标题</Label>
                   <p className="text-sm font-medium">{selectedScript.topicTitle}</p>
                 </div>
               )}
@@ -499,7 +535,7 @@ export default function StoreAIScriptsPage() {
                       </div>
                     )}
                     <div>
-                      <Label className="text-xs text-gray-500">口播逐字稿</Label>
+                      <Label className="text-xs text-gray-500">脚本内容</Label>
                       <div className="mt-1 bg-gray-900 text-gray-100 rounded-lg p-4 text-sm leading-relaxed whitespace-pre-wrap max-h-[400px] overflow-y-auto">
                         {scriptContent || selectedScript.content}
                       </div>
@@ -507,10 +543,14 @@ export default function StoreAIScriptsPage() {
                   </>
                 );
               })()}
-              <div className="flex justify-end gap-2">
-                <Button variant="outline" onClick={() => handleCopy(selectedScript.content, selectedScript.id)}>
-                  {copiedId === selectedScript.id ? <CheckCheck className="h-4 w-4 mr-2" /> : <Copy className="h-4 w-4 mr-2" />}
-                  {copiedId === selectedScript.id ? '已复制' : '复制内容'}
+              <div className="flex justify-end">
+                <Button variant="default" onClick={() => {
+                  const scriptContent = extractScriptContent(selectedScript.content);
+                  const encodedContent = encodeURIComponent(scriptContent);
+                  router.push(`/store/ai-content?source=${encodedContent}`);
+                }} className="bg-green-600 hover:bg-green-700">
+                  <Pencil className="h-4 w-4 mr-2" />
+                  去仿写
                 </Button>
               </div>
             </div>

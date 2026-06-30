@@ -34,7 +34,7 @@ interface Template {
 
 interface ScriptRecord {
   id: string;
-  type: 'original' | 'rewrite';
+  type: 'original' | 'rewrite' | 'material';
   topicId?: string;
   topicTitle?: string;
   summary?: string;
@@ -43,6 +43,8 @@ interface ScriptRecord {
   templateName?: string;
   content: string;
   sourceContent?: string;
+  direction?: string;
+  subCategory?: string;
   createdAt: string;
 }
 
@@ -59,11 +61,53 @@ export default function StoreAIContentPage() {
   const [topicSummary, setTopicSummary] = useState('');
   const [topicAngle, setTopicAngle] = useState('');
   const [corePoints, setCorePoints] = useState('');
+  const [direction, setDirection] = useState('');
+  const [subCategory, setSubCategory] = useState('');
   const [templates, setTemplates] = useState<Template[]>([]);
   const [selectedTemplate, setSelectedTemplate] = useState<Template | null>(null);
   const [originalScript, setOriginalScript] = useState('');
   const [generatingScript, setGeneratingScript] = useState(false);
   const [copied, setCopied] = useState(false);
+
+  // 方向和子类选项
+  const contentDirections = [
+    { value: '', label: '不限' },
+    { value: '教知识', label: '教知识', sub: '涨粉' },
+    { value: '聊观点', label: '聊观点', sub: '人设' },
+    { value: '讲故事', label: '讲故事', sub: '信任' },
+    { value: '晒过程', label: '晒过程', sub: '变现' },
+  ];
+
+  const subCategories: Record<string, { value: string; label: string }[]> = {
+    '教知识': [
+      { value: '', label: '不限' },
+      { value: '解题型', label: '解题型' },
+      { value: '揭秘型', label: '揭秘型' },
+      { value: '推荐型', label: '推荐型' },
+    ],
+    '聊观点': [
+      { value: '', label: '不限' },
+      { value: '归纳型', label: '归纳型' },
+      { value: '反常识型', label: '反常识型' },
+      { value: '对立型', label: '对立型' },
+    ],
+    '讲故事': [
+      { value: '', label: '不限' },
+      { value: '成就故事', label: '成就故事' },
+      { value: '客户故事', label: '客户故事' },
+      { value: '踩坑故事', label: '踩坑故事' },
+    ],
+    '晒过程': [
+      { value: '', label: '不限' },
+      { value: '挑战型', label: '挑战型' },
+      { value: '体验型', label: '体验型' },
+      { value: '测评改造型', label: '测评改造型' },
+    ],
+  };
+
+  const getSubCategories = () => {
+    return subCategories[direction] || [{ value: '', label: '不限' }];
+  };
 
   // 选题库弹窗
   const [showTopicPicker, setShowTopicPicker] = useState(false);
@@ -117,7 +161,6 @@ export default function StoreAIContentPage() {
       setTopicSummary(topicFromUrl.summary);
       setTopicAngle(topicFromUrl.angle);
       setCurrentTopicId(topicFromUrl.topicId || null);
-      // 设置一个虚拟的 selectedTopic 标记有选题
       setSelectedTopic({
         id: topicFromUrl.topicId || 'from-url',
         title: topicFromUrl.topic,
@@ -126,7 +169,18 @@ export default function StoreAIContentPage() {
         selected: true,
       });
     }
-  }, [topicFromUrl]);
+
+    const sourceContentFromUrl = searchParams.get('source');
+    if (sourceContentFromUrl) {
+      try {
+        const decoded = decodeURIComponent(sourceContentFromUrl);
+        setSourceContent(decoded);
+        setActiveTab('rewrite');
+      } catch (e) {
+        console.error('Failed to decode source content:', e);
+      }
+    }
+  }, [topicFromUrl, searchParams]);
 
   // 打开选题库弹窗
   const handleOpenTopicPicker = async () => {
@@ -368,6 +422,8 @@ export default function StoreAIContentPage() {
           sourceContent: type === 'rewrite' ? sourceContent : null,
           templateName: type === 'original' ? selectedTemplate?.name : rewriteTemplate?.name,
           content,
+          direction: type === 'original' ? direction || '' : '',
+          subCategory: type === 'original' ? subCategory || '' : '',
         }),
       });
       const data = await res.json();
@@ -502,6 +558,51 @@ export default function StoreAIContentPage() {
                               rows={1}
                               className="resize-none text-[11px] min-h-[26px] py-1"
                             />
+                          </div>
+                          <div className="grid grid-cols-2 gap-1.5">
+                            <div>
+                              <label className="text-[10px] text-gray-500 block mb-0.5">内容方向</label>
+                              <div className="grid grid-cols-3 gap-1">
+                                {contentDirections.slice(1).map(opt => (
+                                  <button
+                                    key={opt.value}
+                                    type="button"
+                                    onClick={() => {
+                                      setDirection(opt.value);
+                                      setSubCategory('');
+                                    }}
+                                    className={`flex flex-col items-center justify-center px-1 py-1.5 rounded border text-[10px] transition-all ${
+                                      direction === opt.value
+                                        ? 'border-green-500 bg-green-50 ring-1 ring-green-500/20 text-green-800'
+                                        : 'border-gray-200 bg-white text-gray-700 hover:border-gray-300'
+                                    }`}
+                                  >
+                                    <span className="font-medium leading-tight">{opt.label}</span>
+                                    <span className="text-gray-400 mt-0.5">{opt.sub}</span>
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                            <div>
+                              <label className="text-[10px] text-gray-500 block mb-0.5">子类</label>
+                              <div className="grid grid-cols-2 gap-1">
+                                {getSubCategories().map(opt => (
+                                  <button
+                                    key={opt.value}
+                                    type="button"
+                                    onClick={() => setSubCategory(opt.value)}
+                                    disabled={!direction}
+                                    className={`px-2 py-1.5 rounded border text-[10px] transition-all ${
+                                      subCategory === opt.value
+                                        ? 'border-green-500 bg-green-50 ring-1 ring-green-500/20 text-green-800'
+                                        : 'border-gray-200 bg-white text-gray-700 hover:border-gray-300'
+                                    } ${!direction ? 'opacity-50 cursor-not-allowed' : ''}`}
+                                  >
+                                    {opt.label}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
                           </div>
                           <div className="grid grid-cols-2 gap-1.5">
                             <div>
@@ -821,27 +922,44 @@ export default function StoreAIContentPage() {
                 scriptLibraryTopics
                   .filter((t: any) => !topicSearchKeyword || (t.topic && t.topic.includes(topicSearchKeyword)))
                   .map((topic: any) => {
-                    // Topic 结构：id, topic, summary, angle, corePoints, scripts[]
                     const isSelected = selectedTopic?.id === topic.id;
+                    const hasScripts = topic.scripts && topic.scripts.length > 0;
+                    const latestScript = hasScripts ? topic.scripts[0] : null;
                     return (
                       <div
                         key={topic.id}
-                        className={`flex border rounded-lg cursor-pointer transition-all overflow-hidden group ${isSelected ? 'border-green-500 bg-green-50/60 ring-1 ring-green-500/30' : 'hover:border-green-300 hover:bg-gray-50/60'}`}
+                        className={`border rounded-lg cursor-pointer transition-all overflow-hidden group ${isSelected ? 'border-green-500 bg-green-50/60 ring-1 ring-green-500/30' : 'hover:border-green-300 hover:bg-gray-50/60'}`}
                         onClick={() => handleSelectFromLibrary(topic)}
                       >
                         <div className={`w-[4px] bg-green-500 transition-opacity ${isSelected ? 'opacity-100' : 'opacity-0 group-hover:opacity-30'}`} />
-                        <div className="w-1/2 p-3 border-r">
-                          <div className="text-xs text-gray-500 mb-1">选题</div>
-                          <div className="text-sm font-semibold text-gray-900 flex items-center gap-1.5">
-                            {isSelected && <Check className="h-3.5 w-3.5 text-green-600" />}
-                            {topic.topic || '未命名选题'}
+                        <div className="p-3">
+                          <div className="flex gap-2 mb-2">
+                            <div className="flex-1">
+                              <div className="text-xs text-gray-500 mb-0.5">选题</div>
+                              <div className="text-sm font-semibold text-gray-900 flex items-center gap-1.5">
+                                {isSelected && <Check className="h-3.5 w-3.5 text-green-600" />}
+                                {topic.topic || '未命名选题'}
+                              </div>
+                            </div>
+                            {hasScripts && (
+                              <div className="text-right">
+                                <div className="text-xs text-gray-500 mb-0.5">脚本</div>
+                                <Badge variant="outline" className="text-[10px]">{topic.scripts.length}条</Badge>
+                              </div>
+                            )}
                           </div>
-                        </div>
-                        <div className="w-1/2 p-3">
-                          <div className="text-xs text-gray-500 mb-1">切入角度</div>
-                          <div className="text-xs text-gray-700 leading-relaxed">
+                          <div className="text-xs text-gray-600 mb-2">
+                            <span className="text-gray-500">切入角度：</span>
                             {topic.angle || topic.summary || '-'}
                           </div>
+                          {latestScript && (
+                            <div className="bg-gray-50 rounded p-2 border border-gray-100">
+                              <div className="text-xs text-green-600 font-medium mb-1">📝 脚本预览</div>
+                              <div className="text-xs text-gray-700 line-clamp-2" title={latestScript.content}>
+                                {latestScript.content.slice(0, 100)}{latestScript.content.length > 100 ? '...' : ''}
+                              </div>
+                            </div>
+                          )}
                         </div>
                       </div>
                     );

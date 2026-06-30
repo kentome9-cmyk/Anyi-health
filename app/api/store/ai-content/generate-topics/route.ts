@@ -28,7 +28,7 @@ export async function POST(request: Request) {
       );
     }
 
-    const config = await getOpenAIConfig();
+    const config = await getOpenAIConfig('content');
     if (!config) {
       return NextResponse.json(
         { topics: [], error: 'AI 未配置' },

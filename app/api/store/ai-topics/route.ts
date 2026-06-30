@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getPromptByType, replacePromptVariables } from '@/lib/prompt';
 import { logError, logDebug } from '@/lib/logger';
+import { getOpenAIConfig } from '@/lib/openai';
 
 export async function POST(request: Request) {
   try {
@@ -34,19 +35,15 @@ export async function POST(request: Request) {
       );
     }
 
-    const settings = await prisma.aiSettings.findFirst({
-      where: {},
-      orderBy: { createdAt: 'desc' },
-    });
-
-    if (!settings?.apiKey || !settings?.baseUrl || !settings?.modelId) {
+    const config = await getOpenAIConfig('content');
+    if (!config) {
       return NextResponse.json(
         { topics: [], error: 'AI 未配置，请在管理端设置 API Key、Base URL 和 Model ID' },
         { status: 500 }
       );
     }
 
-    const apiUrl = `${settings.baseUrl.replace(/\/$/, '')}/chat/completions`;
+    const apiUrl = `${config.baseUrl.replace(/\/$/, '')}/chat/completions`;
 
     const existingTopics = await prisma.scriptRecord.findMany({
       where: { storeId },
@@ -94,10 +91,10 @@ export async function POST(request: Request) {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        Authorization: `Bearer ${settings.apiKey}`,
+        Authorization: `Bearer ${config.apiKey}`,
       },
       body: JSON.stringify({
-        model: settings.modelId,
+        model: config.modelId,
         messages: [
           { role: 'system', content: effectiveSystemPrompt },
           { role: 'user', content: userPrompt },

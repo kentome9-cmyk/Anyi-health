@@ -37,8 +37,15 @@ async function getOpenAIConfig(module: string = 'default'): Promise<OpenAIConfig
     return null;
   }
 
+  let decryptedApiKey: string;
+  try {
+    decryptedApiKey = decrypt(settings.apiKey);
+  } catch {
+    decryptedApiKey = settings.apiKey;
+  }
+
   return {
-    apiKey: decrypt(settings.apiKey),
+    apiKey: decryptedApiKey,
     baseUrl: settings.baseUrl,
     modelId: settings.modelId,
   };
@@ -57,8 +64,15 @@ async function getEmbeddingConfig(module: string = 'default'): Promise<Embedding
     return null;
   }
 
+  let decryptedApiKey: string;
+  try {
+    decryptedApiKey = decrypt(settings.embeddingApiKey);
+  } catch {
+    decryptedApiKey = settings.embeddingApiKey;
+  }
+
   return {
-    apiKey: decrypt(settings.embeddingApiKey),
+    apiKey: decryptedApiKey,
     baseUrl: settings.embeddingBaseUrl,
     modelId: settings.embeddingModelId,
   };
