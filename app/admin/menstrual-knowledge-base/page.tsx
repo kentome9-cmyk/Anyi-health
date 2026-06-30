@@ -657,21 +657,21 @@ export default function AdminMenstrualKnowledgeBasePage() {
                 </TableHead>
                 {activeTab === 'products' ? (
                   <>
-                    <TableHead className="font-semibold text-gray-700 w-[10%]">分类</TableHead>
-                    <TableHead className="font-semibold text-gray-700 w-[14%]">产品名称</TableHead>
-                    <TableHead className="font-semibold text-gray-700 w-[8%]">规格</TableHead>
-                    <TableHead className="font-semibold text-gray-700 w-[14%]">产品功效</TableHead>
-                    <TableHead className="font-semibold text-gray-700 w-[18%]">适用人群</TableHead>
-                    <TableHead className="font-semibold text-gray-700 w-[8%] text-center">向量</TableHead>
-                    <TableHead className="font-semibold text-gray-700 w-[8%] text-right">操作</TableHead>
+                    <TableHead className="font-semibold text-gray-700">分类</TableHead>
+                    <TableHead className="font-semibold text-gray-700">产品名称</TableHead>
+                    <TableHead className="font-semibold text-gray-700">规格</TableHead>
+                    <TableHead className="font-semibold text-gray-700">产品功效</TableHead>
+                    <TableHead className="font-semibold text-gray-700">适用人群</TableHead>
+                    <TableHead className="font-semibold text-gray-700 text-center">向量</TableHead>
+                    <TableHead className="font-semibold text-gray-700 text-right">操作</TableHead>
                   </>
                 ) : (
                   <>
-                    <TableHead className="font-semibold text-gray-700 w-[15%]">调理类型</TableHead>
-                    <TableHead className="font-semibold text-gray-700 w-[25%]">适用人群</TableHead>
-                    <TableHead className="font-semibold text-gray-700 w-[30%]">推荐产品组合</TableHead>
-                    <TableHead className="font-semibold text-gray-700 w-[10%] text-center">向量</TableHead>
-                    <TableHead className="font-semibold text-gray-700 w-[10%] text-right">操作</TableHead>
+                    <TableHead className="font-semibold text-gray-700">调理类型</TableHead>
+                    <TableHead className="font-semibold text-gray-700">适用人群</TableHead>
+                    <TableHead className="font-semibold text-gray-700">推荐产品组合</TableHead>
+                    <TableHead className="font-semibold text-gray-700 text-center">向量</TableHead>
+                    <TableHead className="font-semibold text-gray-700 text-right">操作</TableHead>
                   </>
                 )}
               </TableRow>
