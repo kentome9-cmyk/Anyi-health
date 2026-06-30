@@ -80,4 +80,5 @@ export {
   CircleAlert,
   XCircle,
   Palette,
+  Globe,
 } from 'lucide-react';

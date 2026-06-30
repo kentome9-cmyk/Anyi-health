@@ -1,9 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { requireAdmin, handleAuthError } from '@/lib/auth';
+import { logError } from '@/lib/logger';
 
 // 更新脚本推荐状态
 export async function PUT(request: NextRequest) {
   try {
+    await requireAdmin();
     const { searchParams } = new URL(request.url);
     const id = searchParams.get('id');
     const action = searchParams.get('action');
@@ -28,11 +31,27 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ script });
     }
 
+    if (action === 'publish') {
+      const script = await prisma.scriptRecord.update({
+        where: { id },
+        data: { isPublic: true },
+      });
+      return NextResponse.json({ script });
+    }
+
+    if (action === 'unpublish') {
+      const script = await prisma.scriptRecord.update({
+        where: { id },
+        data: { isPublic: false },
+      });
+      return NextResponse.json({ script });
+    }
+
     if (action === 'stats') {
       const body = await request.json();
       const { field, value } = body;
-      
-      if (!['viewCount', 'likeCount', 'commentCount', 'favoriteCount', 'rewriteCount'].includes(field)) {
+
+      if (!['viewCount', 'likeCount', 'commentCount', 'favoriteCount'].includes(field)) {
         return NextResponse.json({ error: 'Invalid field' }, { status: 400 });
       }
 
@@ -45,14 +64,15 @@ export async function PUT(request: NextRequest) {
 
     return NextResponse.json({ error: 'Invalid action' }, { status: 400 });
   } catch (error) {
-    console.error('Failed to update script:', error);
-    return NextResponse.json({ error: 'Failed to update script' }, { status: 500 });
+    logError('Failed to update script', error);
+    return handleAuthError(error);
   }
 }
 
 // 删除脚本
 export async function DELETE(request: NextRequest) {
   try {
+    await requireAdmin();
     const { searchParams } = new URL(request.url);
     const id = searchParams.get('id');
 
@@ -66,7 +86,7 @@ export async function DELETE(request: NextRequest) {
 
     return NextResponse.json({ success: true });
   } catch (error) {
-    console.error('Failed to delete script:', error);
-    return NextResponse.json({ error: 'Failed to delete script' }, { status: 500 });
+    logError('Failed to delete script', error);
+    return handleAuthError(error);
   }
 }

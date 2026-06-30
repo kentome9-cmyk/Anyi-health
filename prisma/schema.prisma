@@ -20,6 +20,8 @@ model Admin {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  uploadedMaterials ScriptMaterial[]
+
   @@map("admin")
 }
 
@@ -528,17 +530,41 @@ model ScriptRecord {
   favoriteCount   Int      @default(0)            // 收藏量
   isRecommended   Boolean  @default(false)        // 是否推荐
   isFilmed        Boolean  @default(false)        // 是否已拍摄
+  isPublic        Boolean  @default(false)        // 是否加入公共脚本库
+  sourceMaterialId String?                       // 关联的素材ID（改写来源）
   createdAt       DateTime @default(now())
 
   // 关联
   store           Store    @relation(fields: [storeId], references: [id], onDelete: Cascade)
   topic           Topic?   @relation(fields: [topicId], references: [id], onDelete: SetNull)
+  sourceMaterial  ScriptMaterial? @relation(fields: [sourceMaterialId], references: [id], onDelete: SetNull)
 
   @@index([storeId])
   @@index([topicId])
   @@index([type])
   @@index([isRecommended])
+  @@index([isPublic])
+  @@index([sourceMaterialId])
   @@map("script_records")
+}
+
+// 管理员上传的脚本素材（供门店参考/改写）
+model ScriptMaterial {
+  id            String   @id @default(uuid())
+  title         String   @db.VarChar(255)        // 素材标题
+  content       String   @db.Text                  // 素材内容（原文）
+  source        String?  @db.VarChar(255)         // 来源（可选，如：抖音某博主、某书某作者）
+  category      String?  @db.VarChar(100)         // 分类（可选）
+  uploadedById  String?                            // 上传者（管理员ID）
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  uploader      Admin?   @relation(fields: [uploadedById], references: [id], onDelete: SetNull)
+  rewrites      ScriptRecord[]
+
+  @@index([category])
+  @@index([uploadedById])
+  @@map("script_materials")
 }
 
 // ============================================

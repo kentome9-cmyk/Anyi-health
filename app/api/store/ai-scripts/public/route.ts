@@ -3,18 +3,16 @@ import { prisma } from '@/lib/prisma';
 
 export async function GET(request: NextRequest) {
   try {
-    // 获取播放量 >= 1000 的爆款脚本作为公共脚本
+    // 公共脚本库：管理员手动标记为 isPublic=true 的脚本，按播放量倒序
     const scripts = await prisma.scriptRecord.findMany({
       where: {
-        viewCount: {
-          gte: 1000,
-        },
+        isPublic: true,
       },
       orderBy: [
         { viewCount: 'desc' },
         { createdAt: 'desc' },
       ],
-      take: 100,
+      take: 200,
     });
 
     return NextResponse.json({ scripts });

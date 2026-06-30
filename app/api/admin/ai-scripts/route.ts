@@ -10,20 +10,24 @@ export async function GET(request: NextRequest) {
     const storeId = searchParams.get('storeId');
     const type = searchParams.get('type');
     const isRecommended = searchParams.get('isRecommended');
+    const isPublic = searchParams.get('isPublic');
     const minViews = searchParams.get('minViews');
     const keyword = searchParams.get('keyword');
     const page = Math.max(1, parseInt(searchParams.get('page') || '1'));
     const pageSize = Math.min(100, Math.max(1, parseInt(searchParams.get('pageSize') || '20')));
 
     const where: any = {};
-    
-    if (storeId) where.storeId = storeId;
-    if (type) where.type = type;
+
+    if (storeId && storeId !== 'all') where.storeId = storeId;
+    if (type && type !== 'all') where.type = type;
     if (isRecommended === 'true') where.isRecommended = true;
+    if (isRecommended === 'false') where.isRecommended = false;
+    if (isPublic === 'true') where.isPublic = true;
+    if (isPublic === 'false') where.isPublic = false;
     if (minViews) where.viewCount = { gte: parseInt(minViews) };
     if (keyword) {
       where.OR = [
-        { topic: { contains: keyword } },
+        { topicTitle: { contains: keyword } },
         { content: { contains: keyword } },
       ];
     }

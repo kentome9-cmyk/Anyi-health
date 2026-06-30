@@ -18,7 +18,7 @@ interface QAItem {
   question: string;
   answer: string;
   category: string | null;
-  keywords: string[] | null;
+  keywords: string | null;
   isActive: boolean;
   hitCount: number;
   createdAt: string;
@@ -92,7 +92,7 @@ export default function AdminAIQAPage() {
       question: item.question,
       answer: item.answer,
       category: item.category || '',
-      keywords: (item.keywords || []).join(', '),
+      keywords: item.keywords || '',
       isActive: item.isActive,
     });
     setShowDialog(true);
@@ -118,9 +118,7 @@ export default function AdminAIQAPage() {
           question: formData.question,
           answer: formData.answer,
           category: formData.category || null,
-          keywords: formData.keywords
-            ? formData.keywords.split(',').map((k) => k.trim()).filter(Boolean)
-            : null,
+          keywords: formData.keywords.trim() || null,
           isActive: formData.isActive,
         }),
       });
@@ -466,9 +464,9 @@ export default function AdminAIQAPage() {
                     <span className="font-medium">分类：</span>{viewItem.category}
                   </span>
                 )}
-                {viewItem.keywords && viewItem.keywords.length > 0 && (
+                {viewItem.keywords && viewItem.keywords.trim() && (
                   <span>
-                    <span className="font-medium">关键词：</span>{viewItem.keywords.join(', ')}
+                    <span className="font-medium">关键词：</span>{viewItem.keywords}
                   </span>
                 )}
               </div>
