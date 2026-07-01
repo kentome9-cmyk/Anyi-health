@@ -28,9 +28,40 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { FileText, Copy, CheckCheck, Search, Send, Pencil, RefreshCw, BookOpen } from '@/lib/icons';
+import { FileText, Copy, CheckCheck, Search, Send, Pencil, RefreshCw, BookOpen, Filter, Clapperboard } from '@/lib/icons';
+import { DataTablePagination } from '@/components/ui/data-table-pagination';
 import { useAuthStore } from '@/stores/auth.store';
 import { extractScriptMetadata, getScriptTextToCopy, extractScriptContent } from '@/lib/script-utils';
+
+const DIRECTIONS = [
+  { value: '教知识', label: '教知识', sub: '认知' },
+  { value: '聊观点', label: '聊观点', sub: '人设' },
+  { value: '讲故事', label: '讲故事', sub: '信任' },
+  { value: '晒过程', label: '晒过程', sub: '变现' },
+];
+
+const SUB_CATEGORIES: Record<string, { value: string; label: string }[]> = {
+  '教知识': [
+    { value: '解题型', label: '解题型' },
+    { value: '揭秘型', label: '揭秘型' },
+    { value: '推荐型', label: '推荐型' },
+  ],
+  '聊观点': [
+    { value: '归纳型', label: '归纳型' },
+    { value: '反常识型', label: '反常识型' },
+    { value: '对立型', label: '对立型' },
+  ],
+  '讲故事': [
+    { value: '成就故事', label: '成就故事' },
+    { value: '客户故事', label: '客户故事' },
+    { value: '踩坑故事', label: '踩坑故事' },
+  ],
+  '晒过程': [
+    { value: '挑战型', label: '挑战型' },
+    { value: '体验型', label: '体验型' },
+    { value: '测评改造型', label: '测评改造型' },
+  ],
+};
 
 interface ScriptRecord {
   id: string;
@@ -70,6 +101,13 @@ export default function StoreAIScriptsPage() {
   const [selectedScript, setSelectedScript] = useState<ScriptRecord | null>(null);
   const [editingStats, setEditingStats] = useState<Record<string, { viewCount?: number; likeCount?: number }>>({});
 
+  const [selectedDirection, setSelectedDirection] = useState('');
+  const [selectedSubCategory, setSelectedSubCategory] = useState('');
+
+  const [publicPage, setPublicPage] = useState(1);
+  const [publicPageSize, setPublicPageSize] = useState(10);
+  const [publicTotal, setPublicTotal] = useState(0);
+
   useEffect(() => {
     if (!_hasHydrated) return;
     if (!isAuthenticated) {
@@ -83,6 +121,19 @@ export default function StoreAIScriptsPage() {
       loadPublicScripts();
     }
   }, [storeId]);
+
+  useEffect(() => {
+    if (activeTab === 'public') {
+      setPublicPage(1);
+      loadPublicScripts();
+    }
+  }, [selectedDirection, selectedSubCategory]);
+
+  useEffect(() => {
+    if (activeTab === 'public' && storeId) {
+      loadPublicScripts();
+    }
+  }, [publicPage, publicPageSize]);
 
   const loadScripts = async () => {
     try {
@@ -101,9 +152,14 @@ export default function StoreAIScriptsPage() {
     try {
       const params = new URLSearchParams();
       if (searchKeyword) params.set('keyword', searchKeyword);
+      if (selectedDirection) params.set('direction', selectedDirection);
+      if (selectedSubCategory) params.set('subCategory', selectedSubCategory);
+      params.set('page', publicPage.toString());
+      params.set('pageSize', publicPageSize.toString());
       const res = await fetch(`/api/store/ai-scripts/public?${params}`);
       const data = await res.json();
       setPublicScripts(data.scripts || []);
+      setPublicTotal(data.total || 0);
     } catch (error) {
       console.error('Failed to load public scripts:', error);
     }
@@ -196,16 +252,6 @@ export default function StoreAIScriptsPage() {
   };
 
   const filteredScripts = scripts.filter(script => {
-    return searchKeyword === '' ||
-      script.topicTitle?.includes(searchKeyword) ||
-      script.corePoints?.includes(searchKeyword) ||
-      script.content.includes(searchKeyword) ||
-      script.number?.includes(searchKeyword) ||
-      script.direction?.includes(searchKeyword) ||
-      script.subCategory?.includes(searchKeyword);
-  });
-
-  const filteredPublicScripts = publicScripts.filter(script => {
     return searchKeyword === '' ||
       script.topicTitle?.includes(searchKeyword) ||
       script.corePoints?.includes(searchKeyword) ||
@@ -376,6 +422,14 @@ export default function StoreAIScriptsPage() {
     </Table>
   );
 
+  const handleResetFilters = () => {
+    setSelectedDirection('');
+    setSelectedSubCategory('');
+    setSearchKeyword('');
+    setPublicPage(1);
+    loadPublicScripts();
+  };
+
   return (
     <div className="flex-1 overflow-y-auto bg-gray-50">
       <div className="p-4 md:p-6">
@@ -399,7 +453,10 @@ export default function StoreAIScriptsPage() {
             我的脚本库
           </button>
           <button
-            onClick={() => setActiveTab('public')}
+            onClick={() => {
+              setActiveTab('public');
+              loadPublicScripts();
+            }}
             className={`px-4 py-2 text-sm font-medium rounded-md transition-colors flex items-center gap-1 ${
               activeTab === 'public'
                 ? 'bg-white text-gray-900 shadow-sm'
@@ -413,20 +470,81 @@ export default function StoreAIScriptsPage() {
 
         <Card className="mb-4">
           <CardContent className="p-3">
-            <div className="flex items-center gap-2">
-              <Search className="h-4 w-4 text-gray-400" />
-              <input
-                type="text"
-                placeholder="搜索选题、编号、方向、子类、内容..."
-                value={searchKeyword}
-                onChange={e => {
-                  setSearchKeyword(e.target.value);
-                  if (activeTab === 'public') {
-                    loadPublicScripts();
-                  }
-                }}
-                className="flex-1 text-sm border-0 outline-none bg-transparent"
-              />
+            <div className="flex flex-wrap items-center gap-3">
+              <div className="relative flex-1 min-w-[200px]">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                <input
+                  type="text"
+                  placeholder="搜索选题、编号、方向、子类..."
+                  value={searchKeyword}
+                  onChange={e => {
+                    setSearchKeyword(e.target.value);
+                    if (activeTab === 'public') {
+                      setPublicPage(1);
+                      loadPublicScripts();
+                    }
+                  }}
+                  className="w-full pl-9 pr-3 py-2 text-sm border border-gray-200 rounded-lg outline-none focus:border-green-500 focus:ring-1 focus:ring-green-500/30"
+                />
+              </div>
+
+              {activeTab === 'public' && (
+                <>
+                  <div className="flex items-center gap-1">
+                    <Filter className="h-4 w-4 text-gray-400" />
+                    <span className="text-sm text-gray-500">筛选：</span>
+                  </div>
+                  
+                  <Select
+                    value={selectedDirection || '__all__'}
+                    onValueChange={(value) => {
+                      setSelectedDirection(value === '__all__' ? '' : value);
+                      setSelectedSubCategory('');
+                    }}
+                  >
+                    <SelectTrigger className="w-28 text-sm">
+                      <SelectValue placeholder="全部方向" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__all__">全部方向</SelectItem>
+                      {DIRECTIONS.map((dir) => (
+                        <SelectItem key={dir.value} value={dir.value}>
+                          {dir.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+
+                  <Select
+                    value={selectedSubCategory || '__all__'}
+                    onValueChange={(value) => setSelectedSubCategory(value === '__all__' ? '' : value)}
+                    disabled={!selectedDirection}
+                  >
+                    <SelectTrigger className="w-28 text-sm">
+                      <SelectValue placeholder="全部子类" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="__all__">全部子类</SelectItem>
+                      {selectedDirection && SUB_CATEGORIES[selectedDirection]?.map((sub) => (
+                        <SelectItem key={sub.value} value={sub.value}>
+                          {sub.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+
+                  {(selectedDirection || selectedSubCategory || searchKeyword) && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={handleResetFilters}
+                      className="h-8 px-3 text-xs"
+                    >
+                      重置
+                    </Button>
+                  )}
+                </>
+              )}
             </div>
           </CardContent>
         </Card>
@@ -447,15 +565,30 @@ export default function StoreAIScriptsPage() {
                 </div>
               )
             ) : (
-              filteredPublicScripts.length === 0 ? (
+              publicScripts.length === 0 ? (
                 <div className="text-center py-12 text-gray-500">
                   <BookOpen className="h-10 w-10 mx-auto mb-3 opacity-40" />
-                  <p className="text-sm">{publicScripts.length === 0 ? '暂无公共脚本记录' : '未找到匹配的脚本'}</p>
+                  <p className="text-sm">暂无公共脚本记录</p>
                 </div>
               ) : (
-                <div className="overflow-x-auto">
-                  {renderPublicScriptsTable(filteredPublicScripts)}
-                </div>
+                <>
+                  <div className="overflow-x-auto">
+                    {renderPublicScriptsTable(publicScripts)}
+                  </div>
+                  <div className="px-4 py-3 border-t">
+                    <DataTablePagination
+                      page={publicPage}
+                      pageSize={publicPageSize}
+                      total={publicTotal}
+                      onPageChange={setPublicPage}
+                      onPageSizeChange={(size) => {
+                        setPublicPageSize(size);
+                        setPublicPage(1);
+                      }}
+                      pageSizeOptions={[10, 20, 50, 100]}
+                    />
+                  </div>
+                </>
               )
             )}
           </CardContent>
@@ -543,16 +676,42 @@ export default function StoreAIScriptsPage() {
                   </>
                 );
               })()}
-              <div className="flex justify-end">
-                <Button variant="default" onClick={() => {
-                  const scriptContent = extractScriptContent(selectedScript.content);
-                  const encodedContent = encodeURIComponent(scriptContent);
-                  router.push(`/store/ai-content?source=${encodedContent}`);
-                }} className="bg-green-600 hover:bg-green-700">
-                  <Pencil className="h-4 w-4 mr-2" />
-                  去仿写
-                </Button>
-              </div>
+              {activeTab === 'mine' ? (
+                <div className="flex justify-end gap-3">
+                  <Button variant="outline" onClick={async () => {
+                    const textToCopy = extractScriptContent(selectedScript.content);
+                    await navigator.clipboard.writeText(textToCopy);
+                    setCopiedId(selectedScript.id);
+                    setTimeout(() => setCopiedId(null), 2000);
+                  }}>
+                    {copiedId === selectedScript.id ? (
+                      <CheckCheck className="h-4 w-4 mr-2" />
+                    ) : (
+                      <Clapperboard className="h-4 w-4 mr-2" />
+                    )}
+                    {copiedId === selectedScript.id ? '已复制' : '去拍摄'}
+                  </Button>
+                  <Button variant="default" onClick={() => {
+                    const scriptContent = extractScriptContent(selectedScript.content);
+                    const encodedContent = encodeURIComponent(scriptContent);
+                    router.push(`/store/ai-content?source=${encodedContent}`);
+                  }} className="bg-green-600 hover:bg-green-700">
+                    <Pencil className="h-4 w-4 mr-2" />
+                    去仿写
+                  </Button>
+                </div>
+              ) : (
+                <div className="flex justify-end">
+                  <Button variant="default" onClick={() => {
+                    const scriptContent = extractScriptContent(selectedScript.content);
+                    const encodedContent = encodeURIComponent(scriptContent);
+                    router.push(`/store/ai-content?source=${encodedContent}`);
+                  }} className="bg-green-600 hover:bg-green-700">
+                    <Pencil className="h-4 w-4 mr-2" />
+                    去仿写
+                  </Button>
+                </div>
+              )}
             </div>
           )}
         </DialogContent>
