@@ -1,3 +1,9 @@
+# ============================================
+# Git 忽略规则 - Anyi-health 项目
+# ============================================
+# 此文件定义了不应上传到 Git 仓库的文件和目录
+# ============================================
+
 # See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
 
 # dependencies
@@ -30,12 +36,13 @@ yarn-debug.log*
 yarn-error.log*
 .pnpm-debug.log*
 
-# env files (can opt-in for committing if needed)
-.env*
+# env files (环境变量文件，包含敏感信息，禁止提交)
+/.env
+.env.*
+!.env.example
 
 # postpartum-health (后端项目，独立仓库)
 ../postpartum-health/
-
 
 # typescript
 *.tsbuildinfo
@@ -47,3 +54,10 @@ login2.json
 newadmin.json
 reset.json
 cookies.txt
+
+# ============================================
+# 本地上传文件目录
+# ============================================
+# public/uploads/learning/ - 测试数据文件（包含客户培训资料等本地测试数据）
+# 注意：生产环境应在服务器上单独配置存储，不要将包含真实数据的文件上传到仓库
+public/uploads/learning/*
