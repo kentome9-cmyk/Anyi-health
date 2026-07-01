@@ -1,9 +1,16 @@
 'use client';
 
-import { Store, Lock } from '@/lib/icons';
+import { Store, Lock, User } from '@/lib/icons';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 
 type StoreFormData = {
   storeName: string;
@@ -14,7 +21,14 @@ type StoreFormData = {
   userPhone: string;
   userPassword: string;
   userName: string;
+  userId: string;
 };
+
+interface StoreUserOption {
+  id: string;
+  phone: string;
+  name: string | null;
+}
 
 interface StoreFormProps {
   mode: 'add' | 'edit';
@@ -23,6 +37,7 @@ interface StoreFormProps {
   onFormChange: (data: StoreFormData) => void;
   onSubmit: (e: React.FormEvent) => void;
   onCancel: () => void;
+  availableUsers: StoreUserOption[];
 }
 
 export function StoreForm({
@@ -32,10 +47,15 @@ export function StoreForm({
   onFormChange,
   onSubmit,
   onCancel,
+  availableUsers,
 }: StoreFormProps) {
   const handleChange = (key: keyof typeof formData, value: string) => {
     onFormChange({ ...formData, [key]: value });
   };
+
+  const hasExistingUsers = availableUsers.length > 0;
+  const selectedUserId = formData.userId;
+  const isUsingExistingUser = selectedUserId && mode === 'add';
 
   return (
     <form onSubmit={onSubmit} className="space-y-5">
@@ -102,33 +122,73 @@ export function StoreForm({
           {mode === 'add' ? '登录账号（用于门店员工登录系统）' : '登录账号'}
         </h3>
         <div className="grid grid-cols-2 gap-3">
-          <div className="space-y-1.5 col-span-2">
-            <Label htmlFor={`${mode}UserPhone`}>登录手机号 {mode === 'add' ? '*' : ''}</Label>
-            <Input
-              id={`${mode}UserPhone`}
-              value={formData.userPhone}
-              onChange={(e) => handleChange('userPhone', e.target.value)}
-              placeholder={mode === 'add' ? '11位手机号，用于登录后台' : ''}
-            />
-            {formErrors.userPhone && (
-              <p className="text-xs text-red-500">{formErrors.userPhone}</p>
-            )}
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor={`${mode}UserPassword`}>
-              {mode === 'add' ? '初始密码 *' : '新密码'}
-            </Label>
-            <Input
-              id={`${mode}UserPassword`}
-              type="password"
-              value={formData.userPassword}
-              onChange={(e) => handleChange('userPassword', e.target.value)}
-              placeholder={mode === 'add' ? '至少6位' : '留空则不修改'}
-            />
-            {formErrors.userPassword && (
-              <p className="text-xs text-red-500">{formErrors.userPassword}</p>
-            )}
-          </div>
+          {mode === 'add' && hasExistingUsers && (
+            <div className="space-y-1.5 col-span-2">
+              <Label htmlFor={`${mode}UserId`}>选择已有用户（注册时未填写门店名称的用户）</Label>
+              <Select value={selectedUserId || '__new__'} onValueChange={(value) => handleChange('userId', value === '__new__' ? '' : value)}>
+                <SelectTrigger>
+                  <SelectValue placeholder="选择已有用户或创建新账号" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__new__">创建新账号</SelectItem>
+                  {availableUsers.map((user) => (
+                    <SelectItem key={user.id} value={user.id}>
+                      <div className="flex items-center gap-2">
+                        <User className="w-3 h-3 text-gray-400" />
+                        <span>{user.phone}</span>
+                        {user.name && <span className="text-gray-500 text-sm">({user.name})</span>}
+                      </div>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+          {!isUsingExistingUser && (
+            <>
+              <div className="space-y-1.5 col-span-2">
+                <Label htmlFor={`${mode}UserPhone`}>登录手机号 {mode === 'add' ? '*' : ''}</Label>
+                <Input
+                  id={`${mode}UserPhone`}
+                  value={formData.userPhone}
+                  onChange={(e) => handleChange('userPhone', e.target.value)}
+                  placeholder={mode === 'add' ? '11位手机号，用于登录后台' : ''}
+                />
+                {formErrors.userPhone && (
+                  <p className="text-xs text-red-500">{formErrors.userPhone}</p>
+                )}
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor={`${mode}UserPassword`}>
+                  {mode === 'add' ? '初始密码 *' : '新密码'}
+                </Label>
+                <Input
+                  id={`${mode}UserPassword`}
+                  type="password"
+                  value={formData.userPassword}
+                  onChange={(e) => handleChange('userPassword', e.target.value)}
+                  placeholder={mode === 'add' ? '至少6位' : '留空则不修改'}
+                />
+                {formErrors.userPassword && (
+                  <p className="text-xs text-red-500">{formErrors.userPassword}</p>
+                )}
+              </div>
+            </>
+          )}
+          {isUsingExistingUser && (
+            <div className="space-y-1.5 col-span-2">
+              <Label>已选择用户</Label>
+              <div className="flex items-center gap-2 p-2 bg-gray-50 rounded-lg">
+                <User className="w-4 h-4 text-gray-400" />
+                <span className="font-medium">
+                  {availableUsers.find((u) => u.id === selectedUserId)?.phone}
+                </span>
+                {availableUsers.find((u) => u.id === selectedUserId)?.name && (
+                  <span className="text-gray-500">({availableUsers.find((u) => u.id === selectedUserId)?.name})</span>
+                )}
+              </div>
+            </div>
+          )}
           <div className="space-y-1.5">
             <Label htmlFor={`${mode}UserName`}>店长姓名</Label>
             <Input

@@ -488,9 +488,8 @@ export default function StoreAIContentPage() {
             {/* 路径一：AI原创创作 */}
             <TabsContent value="original" className="mt-0 flex-1 pt-3">
               <div className="grid grid-cols-12 gap-3 h-[calc(100vh-170px)] min-h-[480px]">
-                {/* 左侧：身份 + 三步操作 */}
-                <div className="col-span-6 flex flex-col space-y-2 min-h-0 h-full">
-                  {/* 创作者身份 - 极紧凑 */}
+                {/* 第一列：身份 + 找选题 + 内容方向 */}
+                <div className="col-span-4 flex flex-col space-y-2 min-h-0 h-full">
                   <div className="bg-gradient-to-r from-green-50 to-emerald-50 rounded p-1.5 border border-green-100 shrink-0">
                     <div className="flex items-center gap-1.5 flex-wrap">
                       <Lock className="h-3 w-3 text-green-600 shrink-0" />
@@ -507,7 +506,6 @@ export default function StoreAIContentPage() {
                     </div>
                   </div>
 
-                  {/* 主卡片 - 三步合并 */}
                   <Card className="border shadow-sm flex-1 min-h-0 flex flex-col">
                     <CardContent className="p-2.5 flex flex-col flex-1 min-h-0 space-y-2.5">
                       {/* 第一步：找选题 */}
@@ -542,8 +540,8 @@ export default function StoreAIContentPage() {
                         )}
                       </div>
 
-                      {/* 第二步：内容方向 - 四输入框 */}
-                      <div className="shrink-0">
+                      {/* 第二步：内容方向 */}
+                      <div className="flex-1 min-h-0 overflow-y-auto">
                         <div className="flex items-center gap-1.5 mb-1.5">
                           <span className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-green-600 text-white text-[10px] font-bold">2</span>
                           <span className="text-[11px] font-medium text-gray-900">内容方向</span>
@@ -562,7 +560,7 @@ export default function StoreAIContentPage() {
                           <div className="grid grid-cols-2 gap-1.5">
                             <div>
                               <label className="text-[10px] text-gray-500 block mb-0.5">内容方向</label>
-                              <div className="grid grid-cols-3 gap-1">
+                              <div className="grid grid-cols-2 gap-1">
                                 {contentDirections.slice(1).map(opt => (
                                   <button
                                     key={opt.value}
@@ -604,27 +602,25 @@ export default function StoreAIContentPage() {
                               </div>
                             </div>
                           </div>
-                          <div className="grid grid-cols-2 gap-1.5">
-                            <div>
-                              <label className="text-[10px] text-gray-500 block mb-0.5">内容摘要</label>
-                              <Textarea
-                                placeholder="内容摘要..."
-                                value={topicSummary}
-                                onChange={e => setTopicSummary(e.target.value)}
-                                rows={2}
-                                className="resize-none text-[11px] min-h-[40px] py-1"
-                              />
-                            </div>
-                            <div>
-                              <label className="text-[10px] text-gray-500 block mb-0.5">切入角度</label>
-                              <Textarea
-                                placeholder="切入角度..."
-                                value={topicAngle}
-                                onChange={e => setTopicAngle(e.target.value)}
-                                rows={2}
-                                className="resize-none text-[11px] min-h-[40px] py-1"
-                              />
-                            </div>
+                          <div>
+                            <label className="text-[10px] text-gray-500 block mb-0.5">内容摘要</label>
+                            <Textarea
+                              placeholder="内容摘要..."
+                              value={topicSummary}
+                              onChange={e => setTopicSummary(e.target.value)}
+                              rows={2}
+                              className="resize-none text-[11px] min-h-[40px] py-1"
+                            />
+                          </div>
+                          <div>
+                            <label className="text-[10px] text-gray-500 block mb-0.5">切入角度</label>
+                            <Textarea
+                              placeholder="切入角度..."
+                              value={topicAngle}
+                              onChange={e => setTopicAngle(e.target.value)}
+                              rows={2}
+                              className="resize-none text-[11px] min-h-[40px] py-1"
+                            />
                           </div>
                           <div>
                             <label className="text-[10px] text-gray-500 block mb-0.5">补充说明</label>
@@ -638,66 +634,70 @@ export default function StoreAIContentPage() {
                           </div>
                         </div>
                       </div>
+                    </CardContent>
+                  </Card>
+                </div>
 
-                      {/* 第三步：选择模板 + 生成按钮 */}
-                      <div className="flex-1 min-h-0 flex flex-col">
-                        <div className="flex items-center gap-1.5 mb-1.5 shrink-0">
-                          <span className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-green-600 text-white text-[10px] font-bold">3</span>
-                          <span className="text-[11px] font-medium text-gray-900">选择模板并生成</span>
+                {/* 第二列：选择模板并生成 */}
+                <div className="col-span-3 min-h-0 h-full">
+                  <Card className="border shadow-sm h-full flex flex-col">
+                    <CardContent className="p-2.5 flex flex-col flex-1 min-h-0">
+                      <div className="flex items-center gap-1.5 mb-1.5 shrink-0">
+                        <span className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-green-600 text-white text-[10px] font-bold">3</span>
+                        <span className="text-[11px] font-medium text-gray-900">选择模板</span>
+                      </div>
+                      {templates.length === 0 ? (
+                        <div className="text-[11px] text-gray-400 py-2 border rounded text-center shrink-0">
+                          暂无模板
                         </div>
-                        {templates.length === 0 ? (
-                          <div className="text-[11px] text-gray-400 py-2 border rounded text-center shrink-0">
-                            暂无模板
-                          </div>
-                        ) : (
-                          <div className="space-y-1 overflow-y-auto flex-1 min-h-0">
-                            {templates.map(template => (
-                              <div
-                                key={template.id}
-                                className={`p-1.5 border rounded cursor-pointer transition-all ${
-                                  selectedTemplate?.id === template.id
-                                    ? 'border-green-500 bg-green-50 ring-1 ring-green-500/20'
-                                    : 'hover:border-gray-300 hover:bg-gray-50'
-                                }`}
-                                onClick={() => setSelectedTemplate(template)}
-                              >
-                                <div className="flex items-center justify-between">
-                                  <span className="font-medium text-[11px] text-gray-900">{template.name}</span>
-                                  <span className="text-[9px] text-gray-500 border rounded px-1 py-[1px]">{template.type === 'script' ? '文案创作' : '文案改写'}</span>
-                                </div>
+                      ) : (
+                        <div className="flex-1 min-h-0 overflow-y-auto space-y-1">
+                          {templates.map(template => (
+                            <div
+                              key={template.id}
+                              className={`p-1.5 border rounded cursor-pointer transition-all flex items-center justify-between ${
+                                selectedTemplate?.id === template.id
+                                  ? 'border-green-500 bg-green-50 ring-1 ring-green-500/20'
+                                  : 'hover:border-gray-300 hover:bg-gray-50'
+                              }`}
+                              onClick={() => setSelectedTemplate(template)}
+                            >
+                              <div className="flex-1 min-w-0">
+                                <span className="font-medium text-[11px] text-gray-900 truncate">{template.name}</span>
                                 {template.description && (
-                                  <p className="text-[10px] text-gray-500 mt-0.5 line-clamp-1">{template.description}</p>
+                                  <p className="text-[9px] text-gray-500 mt-0.5 line-clamp-1">{template.description}</p>
                                 )}
                               </div>
-                            ))}
-                          </div>
-                        )}
-                        <div className="mt-2 shrink-0">
-                          <Button
-                            onClick={handleGenerateOriginalScript}
-                            disabled={generatingScript || !selectedTopic || !selectedTemplate}
-                            className="w-full h-7 text-[11px]"
-                          >
-                            {generatingScript ? (
-                              <>
-                                <Loader2 className="mr-1 h-3 w-3 animate-spin" />
-                                生成中...
-                              </>
-                            ) : (
-                              <>
-                                <Play className="mr-1 h-3 w-3" />
-                                生成短视频脚本
-                              </>
-                            )}
-                          </Button>
+                              <span className="text-[9px] text-gray-500 border rounded px-1 py-[1px] ml-2 shrink-0">{template.type === 'script' ? '文案创作' : '文案改写'}</span>
+                            </div>
+                          ))}
                         </div>
+                      )}
+                      <div className="mt-2 shrink-0">
+                        <Button
+                          onClick={handleGenerateOriginalScript}
+                          disabled={generatingScript || !selectedTopic || !selectedTemplate}
+                          className="w-full h-7 text-[11px]"
+                        >
+                          {generatingScript ? (
+                            <>
+                              <Loader2 className="mr-1 h-3 w-3 animate-spin" />
+                              生成中...
+                            </>
+                          ) : (
+                            <>
+                              <Play className="mr-1 h-3 w-3" />
+                              生成脚本
+                            </>
+                          )}
+                        </Button>
                       </div>
                     </CardContent>
                   </Card>
                 </div>
 
-                {/* 右侧：脚本输出区 */}
-                <div className="col-span-6 min-h-0 h-full">
+                {/* 第三列：脚本输出区 */}
+                <div className="col-span-5 min-h-0 h-full">
                   <Card className="border shadow-sm h-full flex flex-col">
                     <CardHeader className="border-b bg-gray-50/50 py-1.5 px-3 shrink-0">
                       <div className="flex items-center justify-between w-full">
@@ -745,9 +745,8 @@ export default function StoreAIContentPage() {
             {/* 路径二：外部文案导入 + AI改写生成 */}
             <TabsContent value="rewrite" className="mt-0 flex-1 pt-3">
               <div className="grid grid-cols-12 gap-3 h-[calc(100vh-170px)] min-h-[480px]">
-                {/* 左侧：身份 + 原文 + 模板 */}
-                <div className="col-span-6 flex flex-col space-y-2 min-h-0 h-full">
-                  {/* 创作者身份 - 极紧凑 */}
+                {/* 第一列：身份 + 粘贴原文 */}
+                <div className="col-span-4 flex flex-col space-y-2 min-h-0 h-full">
                   <div className="bg-gradient-to-r from-green-50 to-emerald-50 rounded p-1.5 border border-green-100 shrink-0">
                     <div className="flex items-center gap-1.5 flex-wrap">
                       <Lock className="h-3 w-3 text-green-600 shrink-0" />
@@ -764,10 +763,8 @@ export default function StoreAIContentPage() {
                     </div>
                   </div>
 
-                  {/* 主卡片 - 两步合并 */}
                   <Card className="border shadow-sm flex-1 min-h-0 flex flex-col">
-                    <CardContent className="p-2.5 flex flex-col flex-1 min-h-0 space-y-2.5">
-                      {/* 第一步：导入原文 */}
+                    <CardContent className="p-2.5 flex flex-col flex-1 min-h-0">
                       <div className="flex-1 min-h-0 flex flex-col">
                         <div className="flex items-center gap-1.5 mb-1.5 shrink-0">
                           <span className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-green-600 text-white text-[10px] font-bold">1</span>
@@ -780,37 +777,46 @@ export default function StoreAIContentPage() {
                           className="resize-none text-[11px] leading-relaxed flex-1 min-h-0"
                         />
                       </div>
+                    </CardContent>
+                  </Card>
+                </div>
 
-                      {/* 第二步：选择模板 + 生成按钮 */}
-                      <div className="shrink-0">
-                        <div className="flex items-center gap-1.5 mb-1.5">
-                          <span className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-green-600 text-white text-[10px] font-bold">2</span>
-                          <span className="text-[11px] font-medium text-gray-900">选择模板并生成</span>
+                {/* 第二列：选择模板并生成 */}
+                <div className="col-span-3 min-h-0 h-full">
+                  <Card className="border shadow-sm h-full flex flex-col">
+                    <CardContent className="p-2.5 flex flex-col flex-1 min-h-0">
+                      <div className="flex items-center gap-1.5 mb-1.5 shrink-0">
+                        <span className="inline-flex items-center justify-center w-4 h-4 rounded-full bg-green-600 text-white text-[10px] font-bold">2</span>
+                        <span className="text-[11px] font-medium text-gray-900">选择模板</span>
+                      </div>
+                      {templates.length === 0 ? (
+                        <div className="text-[11px] text-gray-400 py-2 border rounded text-center shrink-0">
+                          暂无模板
                         </div>
-                        {templates.length === 0 ? (
-                          <div className="text-[11px] text-gray-400 py-2 border rounded text-center mb-2">
-                            暂无模板
-                          </div>
-                        ) : (
-                          <div className="space-y-1 max-h-[90px] overflow-y-auto mb-2">
-                            {templates.map(template => (
-                              <div
-                                key={template.id}
-                                className={`p-1.5 border rounded cursor-pointer transition-all ${
-                                  rewriteTemplate?.id === template.id
-                                    ? 'border-green-500 bg-green-50 ring-1 ring-green-500/20'
-                                    : 'hover:border-gray-300 hover:bg-gray-50'
-                                }`}
-                                onClick={() => setRewriteTemplate(template)}
-                              >
-                                <div className="flex items-center justify-between">
-                                  <span className="font-medium text-[11px] text-gray-900">{template.name}</span>
-                                  <span className="text-[9px] text-gray-500 border rounded px-1 py-[1px]">{template.type === 'script' ? '文案创作' : '文案改写'}</span>
-                                </div>
+                      ) : (
+                        <div className="flex-1 min-h-0 overflow-y-auto space-y-1">
+                          {templates.map(template => (
+                            <div
+                              key={template.id}
+                              className={`p-1.5 border rounded cursor-pointer transition-all flex items-center justify-between ${
+                                rewriteTemplate?.id === template.id
+                                  ? 'border-green-500 bg-green-50 ring-1 ring-green-500/20'
+                                  : 'hover:border-gray-300 hover:bg-gray-50'
+                              }`}
+                              onClick={() => setRewriteTemplate(template)}
+                            >
+                              <div className="flex-1 min-w-0">
+                                <span className="font-medium text-[11px] text-gray-900 truncate">{template.name}</span>
+                                {template.description && (
+                                  <p className="text-[9px] text-gray-500 mt-0.5 line-clamp-1">{template.description}</p>
+                                )}
                               </div>
-                            ))}
-                          </div>
-                        )}
+                              <span className="text-[9px] text-gray-500 border rounded px-1 py-[1px] ml-2 shrink-0">{template.type === 'script' ? '文案创作' : '文案改写'}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      <div className="mt-2 shrink-0">
                         <Button
                           onClick={handleGenerateRewrite}
                           disabled={generatingRewrite || !sourceContent.trim() || !rewriteTemplate}
@@ -824,7 +830,7 @@ export default function StoreAIContentPage() {
                           ) : (
                             <>
                               <Wand2 className="mr-1 h-3 w-3" />
-                              AI身份适配改写
+                              AI改写
                             </>
                           )}
                         </Button>
@@ -833,8 +839,8 @@ export default function StoreAIContentPage() {
                   </Card>
                 </div>
 
-                {/* 右侧：改写输出区 */}
-                <div className="col-span-6 min-h-0 h-full">
+                {/* 第三列：改写输出区 */}
+                <div className="col-span-5 min-h-0 h-full">
                   <Card className="border shadow-sm h-full flex flex-col">
                     <CardHeader className="border-b bg-gray-50/50 py-1.5 px-3 shrink-0">
                       <div className="flex items-center justify-between w-full">
@@ -969,6 +975,7 @@ export default function StoreAIContentPage() {
           </div>
         </DialogContent>
       </Dialog>
-    </div>
+
+      </div>
   );
 }

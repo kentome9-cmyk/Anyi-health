@@ -49,7 +49,10 @@ export default function AdminStoresPage() {
     userPhone: '',
     userPassword: '',
     userName: '',
+    userId: '',
   });
+
+  const [availableUsers, setAvailableUsers] = useState<{ id: string; phone: string; name: string | null }[]>([]);
 
   // 手机号验证：支持11位中国大陆手机号，也支持座机（选填字段）
   const validatePhone = (phone: string, required: boolean = false): string => {
@@ -77,7 +80,18 @@ export default function AdminStoresPage() {
 
   useEffect(() => {
     loadStores();
+    loadAvailableUsers();
   }, []);
+
+  const loadAvailableUsers = async () => {
+    try {
+      const res = await fetch('/api/admin/store-users/available');
+      const data = await res.json();
+      setAvailableUsers(data.list || []);
+    } catch (error) {
+      console.error('Failed to load available users:', error);
+    }
+  };
 
   const loadStores = async () => {
     try {
@@ -101,6 +115,7 @@ export default function AdminStoresPage() {
       userPhone: '',
       userPassword: '',
       userName: '',
+      userId: '',
     });
     setFormErrors({});
   };
@@ -112,10 +127,13 @@ export default function AdminStoresPage() {
     if (!formData.storeName.trim()) {
       errors.storeName = '请填写门店名称';
     }
-    const userPhoneError = validatePhone(formData.userPhone, true);
-    if (userPhoneError) errors.userPhone = userPhoneError;
-    const userPasswordError = validatePassword(formData.userPassword, true);
-    if (userPasswordError) errors.userPassword = userPasswordError;
+
+    if (!formData.userId) {
+      const userPhoneError = validatePhone(formData.userPhone, true);
+      if (userPhoneError) errors.userPhone = userPhoneError;
+      const userPasswordError = validatePassword(formData.userPassword, true);
+      if (userPasswordError) errors.userPassword = userPasswordError;
+    }
 
     // 联系电话是选填的，如果填了就要验证
     if (formData.contactPhone) {
@@ -187,6 +205,7 @@ export default function AdminStoresPage() {
       userPhone: store.storeUser?.phone || '',
       userPassword: '',
       userName: store.storeUser?.name || '',
+      userId: '',
     });
     setIsAddOpen(true);
   };
@@ -353,6 +372,7 @@ export default function AdminStoresPage() {
                 setEditingStore(null);
                 resetForm();
               }}
+              availableUsers={availableUsers}
             />
           </DialogContent>
         </Dialog>

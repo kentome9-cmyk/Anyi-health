@@ -140,6 +140,25 @@ export async function POST(request: Request) {
       });
 
       finalUserId = newUser.id;
+    } else {
+      const existingUser = await prisma.storeUser.findUnique({
+        where: { id: finalUserId },
+        include: { stores: true },
+      });
+
+      if (!existingUser) {
+        return NextResponse.json(
+          { error: '用户不存在' },
+          { status: 400 }
+        );
+      }
+
+      if (existingUser.stores.length > 0) {
+        return NextResponse.json(
+          { error: '该用户已关联门店，无法重复创建' },
+          { status: 400 }
+        );
+      }
     }
 
     const store = await prisma.store.create({
