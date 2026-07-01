@@ -437,9 +437,9 @@ export default function StoreMenstrualChatPage() {
                         </div>
                       )}
                       {(loading && msg.role === 'assistant') ? (
-                        <div className="text-sm text-gray-700 whitespace-pre-wrap leading-relaxed">
+                        <div className="flex items-start">
                           <ChatMarkdown content={msg.content} />
-                          <span className="inline-block w-1 animate-pulse text-[#004349] ml-0.5">|</span>
+                          <span className="inline-block w-1 animate-pulse text-[#004349] ml-1 mt-2 flex-shrink-0">|</span>
                         </div>
                       ) : (
                         <ChatMarkdown content={msg.content} />

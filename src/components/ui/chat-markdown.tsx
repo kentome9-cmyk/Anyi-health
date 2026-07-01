@@ -9,7 +9,7 @@ interface ChatMarkdownProps {
 
 export function ChatMarkdown({ content }: ChatMarkdownProps) {
   return (
-    <div className="prose prose-sm max-w-none prose-headings:mt-2 prose-headings:mb-1 prose-p:mb-2 prose-p:last:mb-0 prose-ul:mb-2 prose-ol:mb-2 prose-li:mb-1">
+    <div className="markdown-body">
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         components={{
@@ -37,6 +37,9 @@ export function ChatMarkdown({ content }: ChatMarkdownProps) {
           ),
           h3: ({ children }) => (
             <h3 className="text-sm font-bold mt-2 mb-1">{children}</h3>
+          ),
+          blockquote: ({ children }) => (
+            <blockquote className="border-l-4 border-[#265D47] pl-4 italic my-4">{children}</blockquote>
           ),
         }}
       >
