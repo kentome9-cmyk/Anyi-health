@@ -3,19 +3,38 @@ import bcrypt from 'bcryptjs';
 
 const prisma = new PrismaClient();
 
+function generateRandomPassword(): string {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789';
+  let password = '';
+  for (let i = 0; i < 12; i++) {
+    password += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return password;
+}
+
 async function main() {
-  const password = await bcrypt.hash('admin123', 10);
-  
-  const admin = await prisma.admin.upsert({
+  const adminExists = await prisma.admin.findUnique({
     where: { username: 'admin' },
-    update: {},
-    create: {
+  });
+
+  if (adminExists) {
+    console.log('Admin already exists, skipping creation');
+    return;
+  }
+
+  const password = generateRandomPassword();
+  const hashedPassword = await bcrypt.hash(password, 10);
+  
+  const admin = await prisma.admin.create({
+    data: {
       username: 'admin',
-      password,
+      password: hashedPassword,
     },
   });
 
   console.log(`Admin created: ${admin.username}`);
+  console.log(`Password: ${password}`);
+  console.log('Please save this password securely, it will not be shown again.');
 }
 
 main()
