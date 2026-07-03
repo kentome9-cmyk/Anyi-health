@@ -55,8 +55,9 @@ const navigation = [
     name: '月经助手',
     icon: Heart,
     children: [
+      { name: '对话记录', href: '/admin/menstrual-chat', icon: MessageSquare },
       { name: '知识库管理', href: '/admin/menstrual-knowledge-base', icon: BookOpen },
-      { name: '问答管理', href: '/admin/ai-qa', icon: MessageSquare },
+      { name: '问答管理', href: '/admin/ai-qa', icon: Lightbulb },
     ],
   },
   { name: 'AI 设置', href: '/admin/ai-settings', icon: Settings },

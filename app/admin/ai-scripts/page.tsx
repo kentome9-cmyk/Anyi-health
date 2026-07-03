@@ -32,6 +32,7 @@ import {
   FileText, Copy, CheckCheck, Search, Star, Trash2, ChevronLeft, ChevronRight,
   Filter, X, Upload, FileSpreadsheet, Globe
 } from '@/lib/icons';
+import { extractScriptMetadata, ScriptMetadata } from '@/lib/script-utils';
 
 interface ScriptRecord {
   id: string;
@@ -570,7 +571,7 @@ export default function AdminAIScriptsPage() {
       />
 
       <Dialog open={!!selectedScript} onOpenChange={() => setSelectedScript(null)}>
-        <DialogContent className="max-w-[700px] max-h-[80vh] overflow-y-auto">
+        <DialogContent className="!max-w-[700px] !w-[95vw] max-h-[85vh] overflow-y-auto [&::-webkit-scrollbar]:w-2 [&::-webkit-scrollbar-track]:bg-gray-100 [&::-webkit-scrollbar-track]:rounded-full [&::-webkit-scrollbar-thumb]:bg-gray-300 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:hover:bg-gray-400">
           <DialogHeader>
             <DialogTitle>脚本详情</DialogTitle>
           </DialogHeader>
@@ -640,8 +641,82 @@ export default function AdminAIScriptsPage() {
               </div>
               <div>
                 <Label className="text-xs text-gray-500">脚本内容</Label>
-                <div className="mt-1 bg-gray-900 text-gray-100 rounded-lg p-4 text-sm leading-relaxed whitespace-pre-wrap max-h-[400px] overflow-y-auto">
-                  {selectedScript.content}
+                <div className="mt-1 max-h-[400px] overflow-y-auto">
+                  {(() => {
+                    const metadata: ScriptMetadata = extractScriptMetadata(selectedScript.content);
+                    if (metadata.script || metadata.titleSuggestion || metadata.hashtags.length > 0) {
+                      return (
+                        <div className="space-y-3">
+                          {metadata.titleSuggestion && (
+                            <div className="bg-red-50 border border-red-100 rounded p-2">
+                              <div className="text-[10px] font-medium text-red-600 mb-1">推荐标题</div>
+                              <div className="text-xs text-red-800 font-medium">{metadata.titleSuggestion}</div>
+                            </div>
+                          )}
+                          {metadata.script && (
+                            <div className="bg-gray-900 text-gray-100 rounded p-3">
+                              <div className="text-[10px] text-gray-400 mb-1">口播文案</div>
+                              <div className="text-xs leading-5 whitespace-pre-wrap">{metadata.script}</div>
+                            </div>
+                          )}
+                          {metadata.shootingTips.length > 0 && (
+                            <div className="bg-blue-50 border border-blue-100 rounded p-2">
+                              <div className="text-[10px] font-medium text-blue-600 mb-1">拍摄要点</div>
+                              <ul className="text-xs text-gray-700 space-y-1">
+                                {metadata.shootingTips.map((tip: string, idx: number) => (
+                                  <li key={idx} className="flex items-start gap-1">
+                                    <span className="text-blue-500 shrink-0">{idx + 1}.</span>
+                                    <span>{tip}</span>
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
+                          )}
+                          {metadata.editingTips.length > 0 && (
+                            <div className="bg-purple-50 border border-purple-100 rounded p-2">
+                              <div className="text-[10px] font-medium text-purple-600 mb-1">剪辑要点</div>
+                              <ul className="text-xs text-gray-700 space-y-1">
+                                {metadata.editingTips.map((tip: string, idx: number) => (
+                                  <li key={idx} className="flex items-start gap-1">
+                                    <span className="text-purple-500 shrink-0">{idx + 1}.</span>
+                                    <span>{tip}</span>
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
+                          )}
+                          {metadata.hashtags.length > 0 && (
+                            <div className="bg-green-50 border border-green-100 rounded p-2">
+                              <div className="text-[10px] font-medium text-green-600 mb-1">推荐标签</div>
+                              <div className="flex flex-wrap gap-1">
+                                {metadata.hashtags.map((tag: string, idx: number) => (
+                                  <span key={idx} className="text-[10px] px-1.5 py-[2px] bg-green-100 text-green-700 rounded">{tag}</span>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                          {metadata.userNeeds && (
+                            <div className="bg-amber-50 border border-amber-100 rounded p-2">
+                              <div className="text-[10px] font-medium text-amber-600 mb-1">用户需求洞察</div>
+                              <div className="text-xs text-gray-700 space-y-1">
+                                {metadata.userNeeds.surface && <div><span className="text-amber-600">表层需求：</span>{metadata.userNeeds.surface}</div>}
+                                {metadata.userNeeds.deep && <div><span className="text-amber-600">深层需求：</span>{metadata.userNeeds.deep}</div>}
+                                {metadata.userNeeds.coreBenefit && <div><span className="text-amber-600">核心利益：</span>{metadata.userNeeds.coreBenefit}</div>}
+                                {metadata.userNeeds.emotion && <div><span className="text-amber-600">情绪需求：</span>{metadata.userNeeds.emotion}</div>}
+                                {metadata.userNeeds.resonance && <div><span className="text-amber-600">共鸣点：</span>{metadata.userNeeds.resonance}</div>}
+                                {metadata.userNeeds.insight && <div><span className="text-amber-600">核心洞察：</span>{metadata.userNeeds.insight}</div>}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    }
+                    return (
+                      <div className="bg-gray-900 text-gray-100 rounded-lg p-3 text-xs leading-5 whitespace-pre-wrap">
+                        {selectedScript.content}
+                      </div>
+                    );
+                  })()}
                 </div>
               </div>
               <div className="flex justify-between items-center pt-2 gap-2 flex-wrap">
