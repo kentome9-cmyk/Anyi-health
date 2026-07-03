@@ -13,6 +13,19 @@ export const SYSTEM_SETTING_DEFAULTS = {
   copyright: '',
   themeColor: '#044332',
   storeThemeColor: '#044332',
+  ossRegion: '',
+  ossBucket: '',
+  ossEndpoint: '',
+  ossAccessKeyId: '',
+  ossAccessKeySecret: '',
+  privacyPolicy: '',
+  termsOfService: '',
+  wxMpAppId: '',
+  wxMpAppSecret: '',
+  wxPayMchId: '',
+  wxPayApiV3Key: '',
+  wxPaySerialNo: '',
+  wxPayPrivateKey: '',
 } as const;
 
 export type SystemSettingKey = keyof typeof SYSTEM_SETTING_DEFAULTS;

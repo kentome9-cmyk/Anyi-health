@@ -13,6 +13,7 @@ import {
   Loader2,
   ChevronDown,
   ChevronRight,
+  Play,
 } from '@/lib/icons';
 
 interface LearningResource {
@@ -40,6 +41,7 @@ interface LearningCategory {
 const TYPE_LABELS: Record<string, string> = {
   md: 'MD文档',
   ppt: 'PDF/PPT',
+  video: '视频',
 };
 
 function truncate(text: string | null, len: number): string {
@@ -285,6 +287,8 @@ export default function StoreLearningCenterPage() {
                                 <div className="flex items-center gap-1.5">
                                   {resource.type === 'md' ? (
                                     <FileText className="h-4 w-4 text-emerald-600" />
+                                  ) : resource.type === 'video' ? (
+                                    <Play className="h-4 w-4 text-red-600" />
                                   ) : (
                                     <Presentation className="h-4 w-4 text-amber-600" />
                                   )}

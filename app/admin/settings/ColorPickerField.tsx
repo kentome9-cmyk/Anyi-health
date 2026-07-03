@@ -34,8 +34,8 @@ export function ColorPickerField({ label, value, onChange }: ColorPickerFieldPro
               className={cn(
                 'group flex items-center gap-1.5 px-2 py-1 border rounded text-xs transition-all',
                 active
-                  ? 'border-emerald-500 bg-emerald-50 text-emerald-700 ring-1 ring-emerald-500/30 font-medium'
-                  : 'border-gray-200 text-gray-700 hover:border-emerald-500/60 hover:bg-emerald-50/30'
+                  ? 'border-[#044332] bg-[#044332]/5 text-[#044332] ring-1 ring-[#044332]/30 font-medium'
+                  : 'border-gray-200 text-gray-700 hover:border-[#044332]/60 hover:bg-[#044332]/5'
               )}
             >
               <div
@@ -52,7 +52,7 @@ export function ColorPickerField({ label, value, onChange }: ColorPickerFieldPro
           type="color"
           value={value}
           onChange={(e) => onChange(e.target.value)}
-          className="h-8 w-10 border border-gray-300 bg-white rounded cursor-pointer transition-all hover:border-emerald-500/60"
+          className="h-8 w-10 border border-gray-300 bg-white rounded cursor-pointer transition-all hover:border-[#044332]/60"
         />
         <Input
           value={value}
@@ -60,9 +60,9 @@ export function ColorPickerField({ label, value, onChange }: ColorPickerFieldPro
           className={cn(
             'flex-1 font-mono text-sm',
             'border-gray-300 bg-white',
-            'hover:border-emerald-500/60 hover:bg-emerald-50/30',
-            'focus-visible:!border-emerald-500 focus-visible:!ring-2 focus-visible:!ring-emerald-500/25',
-            'focus:!border-emerald-500 focus:!ring-2 focus:!ring-emerald-500/25 focus:bg-emerald-50/40',
+            'hover:border-[#044332]/60 hover:bg-[#044332]/5',
+            'focus-visible:!border-[#044332] focus-visible:!ring-2 focus-visible:!ring-[#044332]/25',
+            'focus:!border-[#044332] focus:!ring-2 focus:!ring-[#044332]/25 focus:bg-[#044332]/5',
             'placeholder:text-gray-400',
             'transition-all duration-150'
           )}

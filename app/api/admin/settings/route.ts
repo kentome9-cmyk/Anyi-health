@@ -5,9 +5,22 @@ import { getSystemSettings, updateSystemSettings } from '@/lib/system-settings';
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
+function maskSensitiveValue(value: string, showLength: number = 4): string {
+  if (!value) return '';
+  if (value.length <= showLength) return '*'.repeat(value.length);
+  return '*'.repeat(value.length - showLength) + value.slice(-showLength);
+}
+
 export async function GET() {
   const settings = await getSystemSettings();
-  return NextResponse.json(settings);
+  const masked = { ...settings };
+  if (masked.ossAccessKeyId) {
+    masked.ossAccessKeyId = maskSensitiveValue(masked.ossAccessKeyId, 8);
+  }
+  if (masked.ossAccessKeySecret) {
+    masked.ossAccessKeySecret = maskSensitiveValue(masked.ossAccessKeySecret, 4);
+  }
+  return NextResponse.json(masked);
 }
 
 export async function PUT(request: Request) {

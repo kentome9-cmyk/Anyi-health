@@ -19,11 +19,14 @@ import {
   Minimize2,
   RotateCcw,
   Download,
+  Play,
 } from '@/lib/icons';
 import type { PdfViewerRef } from './PdfViewer';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import type { Components } from 'react-markdown';
+
+import { VideoPlayer } from './VideoPlayer';
 
 // 动态加载 PDF 查看器（禁用 SSR 避免 PDF.js 在服务端报错）
 const PdfViewer = dynamic(() => import('./PdfViewer'), {
@@ -172,6 +175,13 @@ export default function LearningResourceDetailPage() {
     const lower = resource.filePath.toLowerCase();
     return lower.endsWith('.ppt') || lower.endsWith('.pptx');
   }, [resource]);
+  const isVideo = useMemo(() => {
+    if (!resource) return false;
+    if (resource.type === 'video') return true;
+    if (!resource.filePath) return false;
+    const lower = resource.filePath.toLowerCase();
+    return lower.endsWith('.mp4') || lower.endsWith('.webm') || lower.endsWith('.mov');
+  }, [resource]);
 
   // PDF 工具栏状态（位于标题行）
   const pdfRef = useRef<PdfViewerRef>(null);
@@ -251,6 +261,8 @@ export default function LearningResourceDetailPage() {
             <div className="flex items-center gap-2 flex-wrap">
               {resource.type === 'md' ? (
                 <FileText className="h-5 w-5 text-blue-600" />
+              ) : isVideo ? (
+                <Play className="h-5 w-5 text-red-600" />
               ) : (
                 <Presentation className="h-5 w-5 text-orange-600" />
               )}
@@ -378,6 +390,8 @@ export default function LearningResourceDetailPage() {
                 </ReactMarkdown>
               </div>
             </div>
+          ) : isVideo ? (
+            <VideoPlayer url={resource.filePath!} />
           ) : isPdf ? (
             <PdfViewer
               ref={pdfRef}

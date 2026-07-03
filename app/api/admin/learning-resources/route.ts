@@ -4,6 +4,7 @@ import { mkdir, writeFile, stat, unlink, readFile } from 'fs/promises';
 import { join, resolve } from 'path';
 import crypto from 'crypto';
 import { requireAdmin, handleAuthError } from '@/lib/auth';
+import { uploadToOss, deleteFromOss, getObjectKeyFromUrl, isOssUrl } from '@/lib/oss';
 
 interface LearningResource {
   id: string;
@@ -26,25 +27,53 @@ const MAX_FILE_SIZE = {
   md: 2 * 1024 * 1024,
   pptx: 50 * 1024 * 1024,
   ppt: 50 * 1024 * 1024,
+  mp4: 500 * 1024 * 1024,
+  webm: 500 * 1024 * 1024,
+  mov: 500 * 1024 * 1024,
 };
 
-const ALLOWED_EXTENSIONS = ['md', 'pptx', 'ppt', 'pdf'];
+const ALLOWED_EXTENSIONS = ['md', 'pptx', 'ppt', 'pdf', 'mp4', 'webm', 'mov'];
 
-const FILE_SIGNATURES: Record<string, Buffer> = {
-  pdf: Buffer.from([0x25, 0x50, 0x44, 0x46]),
-  zip: Buffer.from([0x50, 0x4B, 0x03, 0x04]),
+const FILE_SIGNATURES: Record<string, Buffer[]> = {
+  pdf: [Buffer.from([0x25, 0x50, 0x44, 0x46])],
+  zip: [Buffer.from([0x50, 0x4B, 0x03, 0x04])],
+  pptx: [Buffer.from([0x50, 0x4B, 0x03, 0x04])],
+  ppt: [Buffer.from([0xD0, 0xCF, 0x11, 0xE0])],
+  mp4: [
+    Buffer.from([0x00, 0x00, 0x00, 0x14, 0x66, 0x74, 0x79, 0x70]),
+    Buffer.from([0x00, 0x00, 0x00, 0x0C, 0x66, 0x74, 0x79, 0x70]),
+    Buffer.from([0x00, 0x00, 0x00, 0x18, 0x66, 0x74, 0x79, 0x70]),
+    Buffer.from([0x00, 0x00, 0x00, 0x20, 0x66, 0x74, 0x79, 0x70]),
+    Buffer.from([0x66, 0x74, 0x79, 0x70]),
+  ],
+  webm: [Buffer.from([0x1A, 0x45, 0xDF, 0xA3])],
+  mov: [
+    Buffer.from([0x00, 0x00, 0x00, 0x14, 0x66, 0x74, 0x79, 0x70]),
+    Buffer.from([0x00, 0x00, 0x00, 0x0C, 0x66, 0x74, 0x79, 0x70]),
+    Buffer.from([0x6D, 0x6F, 0x6F, 0x76]),
+  ],
 };
+
+const VIDEO_EXTENSIONS = ['mp4', 'webm', 'mov'];
 
 async function verifyFileSignature(file: File, ext: string): Promise<boolean> {
   if (ext === 'md') return true;
   
-  const signature = FILE_SIGNATURES[ext] || FILE_SIGNATURES.zip;
-  if (!signature) return true;
+  if (VIDEO_EXTENSIONS.includes(ext)) {
+    return true;
+  }
+  
+  const signatures = FILE_SIGNATURES[ext];
+  if (!signatures || signatures.length === 0) return true;
   
   try {
-    const bytes = await file.slice(0, signature.length).arrayBuffer();
-    const header = Buffer.from(bytes);
-    return header.equals(signature);
+    for (const signature of signatures) {
+      const bytes = await file.slice(0, signature.length).arrayBuffer();
+      const header = Buffer.from(bytes);
+      if (header.equals(signature)) return true;
+    }
+    
+    return false;
   } catch {
     return false;
   }
@@ -140,7 +169,7 @@ export async function POST(request: Request) {
         const fileExt = file.name.split('.').pop()?.toLowerCase();
         if (!fileExt || !ALLOWED_EXTENSIONS.includes(fileExt)) {
           return NextResponse.json(
-            { error: '不支持的文件格式，请上传 .md、.pptx、.ppt 或 .pdf 文件' },
+            { error: '不支持的文件格式，请上传 .md、.pptx、.ppt、.pdf、.mp4、.webm 或 .mov 文件' },
             { status: 400 }
           );
         }
@@ -160,30 +189,31 @@ export async function POST(request: Request) {
           );
         }
 
-        const uploadDir = join(process.cwd(), 'public', 'uploads', 'learning');
-        await mkdir(uploadDir, { recursive: true });
-
         const uuid = crypto.randomUUID();
         const safeExt = sanitizeFileName(fileExt);
         const fileName = `${uuid}.${safeExt}`;
-        const fullPath = resolve(uploadDir, fileName);
-
-        const resolvedUploadDir = resolve(uploadDir);
-        if (!fullPath.startsWith(resolvedUploadDir)) {
-          return NextResponse.json(
-            { error: '文件路径无效' },
-            { status: 400 }
-          );
-        }
 
         const bytes = await file.arrayBuffer();
-        await writeFile(fullPath, Buffer.from(bytes));
+        const buffer = Buffer.from(bytes);
 
-        filePath = `/uploads/learning/${fileName}`;
+        const ossUrl = await uploadToOss(buffer, fileName);
+        if (!ossUrl) {
+          const uploadDir = join(process.cwd(), 'public', 'uploads', 'learning');
+          await mkdir(uploadDir, { recursive: true });
+          const fullPath = resolve(uploadDir, fileName);
+          await writeFile(fullPath, buffer);
+          filePath = `/uploads/learning/${fileName}`;
+        } else {
+          filePath = ossUrl;
+        }
+
         fileSize = formatFileSize(file.size);
 
         if (fileExt === 'pdf') {
-          pageCount = await getPdfPageCount(fullPath);
+          const tempPath = join(process.cwd(), 'public', 'uploads', 'learning', fileName);
+          await writeFile(tempPath, buffer);
+          pageCount = await getPdfPageCount(tempPath);
+          await unlink(tempPath).catch(() => {});
         }
       }
 
@@ -301,13 +331,20 @@ export async function DELETE(request: Request) {
 
     for (const resource of resources) {
       if (resource.filePath) {
-        const fullPath = resolve(process.cwd(), 'public', resource.filePath);
-        if (fullPath.startsWith(uploadDir)) {
-          try {
-            await stat(fullPath);
-            await unlink(fullPath);
-          } catch {
-            // ignore
+        if (isOssUrl(resource.filePath)) {
+          const objectKey = getObjectKeyFromUrl(resource.filePath);
+          if (objectKey) {
+            await deleteFromOss(objectKey).catch(() => {});
+          }
+        } else {
+          const fullPath = resolve(process.cwd(), 'public', resource.filePath);
+          if (fullPath.startsWith(uploadDir)) {
+            try {
+              await stat(fullPath);
+              await unlink(fullPath);
+            } catch {
+              // ignore
+            }
           }
         }
       }

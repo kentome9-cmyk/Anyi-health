@@ -8,7 +8,7 @@ export const dynamic = 'force-dynamic';
 
 export async function POST(request: Request) {
   try {
-    const { phone, password, name, storeName } = await request.json();
+    const { phone, password, name, storeName, agreePrivacyPolicy, agreeTermsOfService } = await request.json();
 
     if (!phone || !password) {
       return NextResponse.json(
@@ -28,6 +28,20 @@ export async function POST(request: Request) {
     if (!phoneRegex.test(phone)) {
       return NextResponse.json(
         { error: '手机号格式不正确' },
+        { status: 400 }
+      );
+    }
+
+    if (!agreePrivacyPolicy) {
+      return NextResponse.json(
+        { error: '请同意隐私政策' },
+        { status: 400 }
+      );
+    }
+
+    if (!agreeTermsOfService) {
+      return NextResponse.json(
+        { error: '请同意服务条款' },
         { status: 400 }
       );
     }

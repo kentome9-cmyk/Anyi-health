@@ -3,7 +3,14 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import { Phone, Lock, User, Store, Leaf, ChevronRight, CheckCircle } from '@/lib/icons';
+
+type AgreementContent = {
+  privacyPolicy: string;
+  termsOfService: string;
+};
 
 function getCookie(name: string): string {
   if (typeof document === 'undefined') return '';
@@ -21,6 +28,11 @@ export default function RegisterPage() {
   const [isLoading, setIsLoading] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
   const [csrfToken, setCsrfToken] = useState('');
+  const [agreementContent, setAgreementContent] = useState<AgreementContent | null>(null);
+  const [agreePrivacyPolicy, setAgreePrivacyPolicy] = useState(false);
+  const [agreeTermsOfService, setAgreeTermsOfService] = useState(false);
+  const [showPrivacyModal, setShowPrivacyModal] = useState(false);
+  const [showTermsModal, setShowTermsModal] = useState(false);
   const router = useRouter();
 
   useEffect(() => {
@@ -38,6 +50,20 @@ export default function RegisterPage() {
       setCsrfToken(token);
     };
     ensureCsrf();
+
+    const loadAgreements = async () => {
+      try {
+        const res = await fetch('/api/public/settings');
+        const data = await res.json();
+        setAgreementContent({
+          privacyPolicy: data.privacyPolicy || '',
+          termsOfService: data.termsOfService || '',
+        });
+      } catch {
+        setAgreementContent({ privacyPolicy: '', termsOfService: '' });
+      }
+    };
+    loadAgreements();
   }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -49,6 +75,8 @@ export default function RegisterPage() {
     if (!password) return setError('请输入密码');
     if (password.length < 6) return setError('密码长度不能少于6位');
     if (password !== confirmPassword) return setError('两次密码输入不一致');
+    if (!agreePrivacyPolicy) return setError('请同意隐私政策');
+    if (!agreeTermsOfService) return setError('请同意服务条款');
 
     setIsLoading(true);
     try {
@@ -60,7 +88,7 @@ export default function RegisterPage() {
       const res = await fetch('/api/auth/store-register', {
         method: 'POST',
         headers,
-        body: JSON.stringify({ phone, password, name, storeName }),
+        body: JSON.stringify({ phone, password, name, storeName, agreePrivacyPolicy, agreeTermsOfService }),
         credentials: 'include',
       });
       const data = await res.json();
@@ -239,6 +267,46 @@ export default function RegisterPage() {
               </div>
             </div>
 
+            {/* 协议勾选 */}
+            <div className="space-y-2 pt-2">
+              <label className="flex items-start gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={agreePrivacyPolicy}
+                  onChange={(e) => setAgreePrivacyPolicy(e.target.checked)}
+                  className="mt-0.5 w-4 h-4 text-green-600 rounded focus:ring-green-500"
+                />
+                <span className="text-xs text-gray-500">
+                  我已阅读并同意
+                  <button
+                    type="button"
+                    onClick={() => setShowPrivacyModal(true)}
+                    className="text-green-600 hover:underline ml-0.5"
+                  >
+                    《隐私政策》
+                  </button>
+                </span>
+              </label>
+              <label className="flex items-start gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={agreeTermsOfService}
+                  onChange={(e) => setAgreeTermsOfService(e.target.checked)}
+                  className="mt-0.5 w-4 h-4 text-green-600 rounded focus:ring-green-500"
+                />
+                <span className="text-xs text-gray-500">
+                  我已阅读并同意
+                  <button
+                    type="button"
+                    onClick={() => setShowTermsModal(true)}
+                    className="text-green-600 hover:underline ml-0.5"
+                  >
+                    《服务条款》
+                  </button>
+                </span>
+              </label>
+            </div>
+
             {/* 错误提示 */}
             {error && (
               <div className="text-red-500 text-sm bg-red-50 px-3 py-2 rounded-lg">
@@ -276,6 +344,74 @@ export default function RegisterPage() {
             </p>
           </div>
         </div>
+
+        {/* 隐私政策弹窗 */}
+        {showPrivacyModal && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-xl shadow-xl w-full max-w-lg max-h-[80vh] flex flex-col">
+              <div className="flex items-center justify-between p-4 border-b">
+                <h3 className="font-semibold text-gray-800">隐私政策</h3>
+                <button
+                  onClick={() => setShowPrivacyModal(false)}
+                  className="text-gray-400 hover:text-gray-600 text-xl"
+                >
+                  ×
+                </button>
+              </div>
+              <div className="flex-1 overflow-auto p-4 prose prose-sm max-w-none text-gray-600">
+                {agreementContent?.privacyPolicy ? (
+                  <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                    {agreementContent.privacyPolicy}
+                  </ReactMarkdown>
+                ) : (
+                  '暂无隐私政策内容'
+                )}
+              </div>
+              <div className="p-4 border-t">
+                <button
+                  onClick={() => setShowPrivacyModal(false)}
+                  className="w-full py-2 rounded-lg bg-gray-100 text-gray-700 hover:bg-gray-200 transition-colors"
+                >
+                  关闭
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* 服务条款弹窗 */}
+        {showTermsModal && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-xl shadow-xl w-full max-w-lg max-h-[80vh] flex flex-col">
+              <div className="flex items-center justify-between p-4 border-b">
+                <h3 className="font-semibold text-gray-800">服务条款</h3>
+                <button
+                  onClick={() => setShowTermsModal(false)}
+                  className="text-gray-400 hover:text-gray-600 text-xl"
+                >
+                  ×
+                </button>
+              </div>
+              <div className="flex-1 overflow-auto p-4 prose prose-sm max-w-none text-gray-600">
+                {agreementContent?.termsOfService ? (
+                  <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                    {agreementContent.termsOfService}
+                  </ReactMarkdown>
+                ) : (
+                  '暂无服务条款内容'
+                )}
+              </div>
+              <div className="p-4 border-t">
+                <button
+                  onClick={() => setShowTermsModal(false)}
+                  className="w-full py-2 rounded-lg bg-gray-100 text-gray-700 hover:bg-gray-200 transition-colors"
+                >
+                  关闭
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

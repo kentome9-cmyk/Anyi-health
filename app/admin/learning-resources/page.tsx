@@ -42,6 +42,7 @@ import {
   Library,
   Check,
   X as XIcon,
+  Play,
 } from '@/lib/icons';
 import { DataTablePagination } from '@/components/ui/data-table-pagination';
 import { useDataTablePagination } from '@/hooks/use-data-table-pagination';
@@ -89,6 +90,7 @@ const emptyForm: FormData = {
 const TYPE_LABELS: Record<string, string> = {
   md: 'MD文档',
   ppt: 'PPT/PDF',
+  video: '视频',
 };
 
 function truncate(text: string | null, len: number): string {
@@ -327,7 +329,12 @@ export default function AdminLearningResourcesPage() {
       setSubmitting(true);
 
       const fileExt = formData.file?.name.split('.').pop()?.toLowerCase() || '';
-      const uploadType = fileExt === 'md' ? 'md' : 'ppt';
+      let uploadType = 'ppt';
+      if (fileExt === 'md') {
+        uploadType = 'md';
+      } else if (['mp4', 'webm', 'mov'].includes(fileExt)) {
+        uploadType = 'video';
+      }
 
       const formDataObj = new FormData();
       formDataObj.append('title', formData.title.trim());
@@ -586,6 +593,8 @@ export default function AdminLearningResourcesPage() {
                       <div className="flex items-center gap-1">
                         {resource.type === 'md' ? (
                           <FileText className="h-4 w-4 text-blue-500" />
+                        ) : resource.type === 'video' ? (
+                          <Play className="h-4 w-4 text-red-500" />
                         ) : (
                           <Presentation className="h-4 w-4 text-orange-500" />
                         )}
@@ -739,13 +748,13 @@ export default function AdminLearningResourcesPage() {
                   ) : (
                     <div>
                       <p className="text-sm text-gray-600">点击或拖拽上传文件</p>
-                      <p className="text-xs text-gray-400 mt-1">支持 .md、.pptx、.ppt、.pdf 格式</p>
+                      <p className="text-xs text-gray-400 mt-1">支持 .md、.pptx、.ppt、.pdf、.mp4、.webm、.mov 格式</p>
                     </div>
                   )}
                   <input
                     type="file"
                     id="file"
-                    accept=".md,.pptx,.ppt,.pdf"
+                    accept=".md,.pptx,.ppt,.pdf,.mp4,.webm,.mov"
                     onChange={handleFileChange}
                     className="hidden"
                   />

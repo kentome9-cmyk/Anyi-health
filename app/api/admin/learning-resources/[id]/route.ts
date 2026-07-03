@@ -1,7 +1,9 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { mkdir, writeFile, stat, unlink } from 'fs/promises';
-import { join } from 'path';
+import { mkdir, writeFile, stat, unlink, readFile } from 'fs/promises';
+import { join, resolve } from 'path';
+import crypto from 'crypto';
+import { uploadToOss, deleteFromOss, getObjectKeyFromUrl, isOssUrl } from '@/lib/oss';
 
 type RouteContext = {
   params: Promise<{ id: string }>;
@@ -79,37 +81,54 @@ export async function PUT(
 
       if (file) {
         if (existingResource?.filePath) {
-          const oldFullPath = join(process.cwd(), 'public', existingResource.filePath);
-          try {
-            await stat(oldFullPath);
-            await unlink(oldFullPath);
-          } catch {
-            console.warn(`Cannot delete old file: ${oldFullPath}`);
+          if (isOssUrl(existingResource.filePath)) {
+            const objectKey = getObjectKeyFromUrl(existingResource.filePath);
+            if (objectKey) {
+              await deleteFromOss(objectKey).catch(() => {});
+            }
+          } else {
+            const oldFullPath = join(process.cwd(), 'public', existingResource.filePath);
+            try {
+              await stat(oldFullPath);
+              await unlink(oldFullPath);
+            } catch {
+              console.warn(`Cannot delete old file: ${oldFullPath}`);
+            }
           }
         }
 
-        const uploadDir = join(process.cwd(), 'public', 'uploads', 'learning');
-        await mkdir(uploadDir, { recursive: true });
-
         const fileExt = file.name.split('.').pop()?.toLowerCase();
-        const allowedExts = ['md', 'pptx', 'ppt', 'pdf'];
+        const allowedExts = ['md', 'pptx', 'ppt', 'pdf', 'mp4', 'webm', 'mov'];
         if (!allowedExts.includes(fileExt || '')) {
           return NextResponse.json(
-            { error: '不支持的文件格式，请上传 .md、.pptx、.ppt 或 .pdf 文件' },
+            { error: '不支持的文件格式，请上传 .md、.pptx、.ppt、.pdf、.mp4、.webm 或 .mov 文件' },
             { status: 400 }
           );
         }
 
-        const fileName = `${Date.now()}-${file.name}`;
-        const fullPath = join(uploadDir, fileName);
-        filePath = `/uploads/learning/${fileName}`;
+        const uuid = crypto.randomUUID();
+        const fileName = `${uuid}.${fileExt}`;
+        const bytes = await file.arrayBuffer();
+        const buffer = Buffer.from(bytes);
+
+        const ossUrl = await uploadToOss(buffer, fileName);
+        if (!ossUrl) {
+          const uploadDir = join(process.cwd(), 'public', 'uploads', 'learning');
+          await mkdir(uploadDir, { recursive: true });
+          const fullPath = join(uploadDir, fileName);
+          await writeFile(fullPath, buffer);
+          filePath = `/uploads/learning/${fileName}`;
+        } else {
+          filePath = ossUrl;
+        }
+
         fileSize = formatFileSize(file.size);
 
-        const bytes = await file.arrayBuffer();
-        await writeFile(fullPath, Buffer.from(bytes));
-
         if (fileExt === 'pdf') {
-          pageCount = await getPdfPageCount(fullPath);
+          const tempPath = join(process.cwd(), 'public', 'uploads', 'learning', fileName);
+          await writeFile(tempPath, buffer);
+          pageCount = await getPdfPageCount(tempPath);
+          await unlink(tempPath).catch(() => {});
         }
       }
 
@@ -202,12 +221,19 @@ export async function DELETE(
     });
 
     if (resource?.filePath) {
-      const fullPath = join(process.cwd(), 'public', resource.filePath);
-      try {
-        await stat(fullPath);
-        await unlink(fullPath);
-      } catch {
-        console.warn(`Cannot delete file: ${fullPath}`);
+      if (isOssUrl(resource.filePath)) {
+        const objectKey = getObjectKeyFromUrl(resource.filePath);
+        if (objectKey) {
+          await deleteFromOss(objectKey).catch(() => {});
+        }
+      } else {
+        const fullPath = join(process.cwd(), 'public', resource.filePath);
+        try {
+          await stat(fullPath);
+          await unlink(fullPath);
+        } catch {
+          console.warn(`Cannot delete file: ${fullPath}`);
+        }
       }
     }
 
