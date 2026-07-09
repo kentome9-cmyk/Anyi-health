@@ -64,12 +64,12 @@ async function handleMockLogin(userType: 'store_user' | 'customer') {
       return NextResponse.json({ error: '未找到门店用户' }, { status: 404 });
     }
 
-    let permissions: string[] | null = null;
+    let permissions: string[] | undefined;
     if (user.permissions) {
       try {
         permissions = JSON.parse(user.permissions);
       } catch {
-        permissions = null;
+        permissions = undefined;
       }
     }
 
@@ -140,12 +140,12 @@ async function handleStoreUserWxLogin(openid: string, unionid?: string) {
     return NextResponse.json({ error: '微信未绑定账号' }, { status: 404 });
   }
 
-  let permissions: string[] | null = null;
+  let permissions: string[] | undefined;
   if (user.permissions) {
     try {
       permissions = JSON.parse(user.permissions);
     } catch {
-      permissions = null;
+      permissions = undefined;
     }
   }
 
