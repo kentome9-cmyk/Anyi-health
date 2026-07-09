@@ -107,24 +107,11 @@ async function getSession(request: NextRequest): Promise<AuthSession | null> {
 }
 
 export async function middleware(request: NextRequest) {
-  const origin = request.headers.get('origin') || '';
-  const isCorsOrigin = corsOrigins.includes(origin);
-
   if (request.method === 'OPTIONS') {
-    const response = new NextResponse(null, { status: 200 });
-    if (isCorsOrigin) {
-      response.headers.set('Access-Control-Allow-Origin', origin);
-    }
-    response.headers.set('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-    response.headers.set('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-    response.headers.set('Access-Control-Allow-Credentials', 'true');
-    return response;
+    return new NextResponse(null, { status: 200 });
   }
 
   const response = NextResponse.next();
-  if (isCorsOrigin) {
-    response.headers.set('Access-Control-Allow-Origin', origin);
-  }
 
   const { pathname } = request.nextUrl;
   const auth = await getSession(request);
