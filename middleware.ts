@@ -3,6 +3,10 @@ import { NextResponse, NextRequest } from 'next/server';
 const AUTH_COOKIE_NAME = 'anyi_auth';
 const SIGNING_SECRET = process.env.SESSION_SECRET;
 
+const corsOrigins = (process.env.CORS_ORIGINS || process.env.CORS_ORIGIN || 'http://localhost:5173').split(',')
+  .map(o => o.trim())
+  .filter(Boolean);
+
 type AuthSession = {
   userType: 'admin' | 'store_user' | 'customer';
   userId: string;
@@ -103,8 +107,20 @@ async function getSession(request: NextRequest): Promise<AuthSession | null> {
 }
 
 export async function middleware(request: NextRequest) {
+  const origin = request.headers.get('origin') || '';
+  const isCorsOrigin = corsOrigins.includes(origin);
+
+  const response = NextResponse.next();
+
+  if (isCorsOrigin) {
+    response.headers.set('Access-Control-Allow-Origin', origin);
+  }
+
   if (request.method === 'OPTIONS') {
-    return NextResponse.next();
+    response.headers.set('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+    response.headers.set('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+    response.headers.set('Access-Control-Allow-Credentials', 'true');
+    return response;
   }
 
   const { pathname } = request.nextUrl;
@@ -156,5 +172,6 @@ export const config = {
     '/customer/:path*',
     '/api/admin/:path*',
     '/api/store/:path*',
+    '/api/auth/:path*',
   ],
 };
