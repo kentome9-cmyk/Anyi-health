@@ -4,7 +4,7 @@ import { requireStoreUser, handleAuthError } from '@/lib/auth';
 
 export async function GET(request: Request) {
   try {
-    const { storeId } = await requireStoreUser();
+    const { storeId } = await requireStoreUser(request);
     const { searchParams } = new URL(request.url);
     
     const page = Math.max(1, Number(searchParams.get('page')) || 1);
@@ -27,7 +27,7 @@ export async function GET(request: Request) {
         take: pageSize,
         orderBy: { createdAt: 'desc' },
         include: {
-          plans: { where: { isLatest: true }, select: { status: true } },
+          plans: { select: { status: true, isLatest: true } },
           bodyRecords: {
             orderBy: { visitDate: 'desc' },
             take: 1,
@@ -52,6 +52,7 @@ export async function GET(request: Request) {
       height: customer.height,
       weight: customer.weight,
       planStatus: customer.plans[0]?.status || '',
+      planCount: customer.plans.length,
       lastServiceDate: customer.bodyRecords[0]?.visitDate || null,
       createdAt: customer.createdAt,
     }));
@@ -69,7 +70,7 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    const { storeId } = await requireStoreUser();
+    const { storeId } = await requireStoreUser(request);
     const body = await request.json();
     
     const {

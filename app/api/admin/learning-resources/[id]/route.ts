@@ -78,6 +78,7 @@ export async function PUT(
       let filePath = existingResource?.filePath || null;
       let fileSize = existingResource?.fileSize || null;
       let pageCount = existingResource?.pageCount || null;
+      let content: string | null = null;
 
       if (file) {
         if (existingResource?.filePath) {
@@ -111,6 +112,10 @@ export async function PUT(
         const bytes = await file.arrayBuffer();
         const buffer = Buffer.from(bytes);
 
+        if (fileExt === 'md') {
+          content = buffer.toString('utf-8');
+        }
+
         const ossUrl = await uploadToOss(buffer, fileName);
         if (!ossUrl) {
           const uploadDir = join(process.cwd(), 'public', 'uploads', 'learning');
@@ -139,6 +144,7 @@ export async function PUT(
           type,
           category,
           description: description || null,
+          content: type === 'md' ? content : undefined,
           filePath,
           fileSize,
           pageCount,

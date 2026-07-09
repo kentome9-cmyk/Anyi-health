@@ -654,3 +654,5 @@ model LearningCategory {
   @@index([sortOrder])
   @@map("learning_category")
 }
+
+

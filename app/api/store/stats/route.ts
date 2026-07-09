@@ -1,12 +1,10 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { requireStoreUser, handleAuthError } from '@/lib/auth';
 
 export async function GET(request: Request) {
   try {
-    const storeId = request.headers.get('x-store-id');
-    if (!storeId) {
-      return NextResponse.json({ error: '缺少门店ID' }, { status: 401 });
-    }
+    const { storeId } = await requireStoreUser(request);
 
     const [
       totalCustomers,
@@ -36,10 +34,6 @@ export async function GET(request: Request) {
       totalTopics,
     });
   } catch (error) {
-    console.error('Get store stats error:', error);
-    return NextResponse.json(
-      { error: '获取统计数据失败' },
-      { status: 500 }
-    );
+    return handleAuthError(error);
   }
 }

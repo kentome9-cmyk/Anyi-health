@@ -34,6 +34,29 @@ async function hmacSHA256(data: string, secret: string): Promise<string> {
     .join('');
 }
 
+async function parseToken(token: string): Promise<AuthSession | null> {
+  if (!SIGNING_SECRET || SIGNING_SECRET.length < 32) {
+    return null;
+  }
+  
+  const [data, signature] = token.split('.');
+  if (!data || !signature) return null;
+  
+  try {
+    const expectedSignature = await hmacSHA256(data, SIGNING_SECRET);
+    if (signature !== expectedSignature) return null;
+    
+    const session = JSON.parse(data) as AuthSession;
+    if (session.expiresAt && Date.now() > session.expiresAt) {
+      return null;
+    }
+    
+    return session;
+  } catch {
+    return null;
+  }
+}
+
 async function parseAuthCookie(request: NextRequest): Promise<AuthSession | null> {
   const raw = request.cookies.get(AUTH_COOKIE_NAME)?.value;
   if (!raw) return null;
@@ -60,9 +83,32 @@ async function parseAuthCookie(request: NextRequest): Promise<AuthSession | null
   }
 }
 
+async function getSession(request: NextRequest): Promise<AuthSession | null> {
+  const authHeader = request.headers.get('authorization');
+  
+  if (authHeader?.startsWith('Bearer ')) {
+    const token = authHeader.slice(7);
+    const session = await parseToken(token);
+    if (session) {
+      return session;
+    }
+  }
+
+  const cookieSession = await parseAuthCookie(request);
+  if (cookieSession) {
+    return cookieSession;
+  }
+
+  return null;
+}
+
 export async function middleware(request: NextRequest) {
+  if (request.method === 'OPTIONS') {
+    return NextResponse.next();
+  }
+
   const { pathname } = request.nextUrl;
-  const auth = await parseAuthCookie(request);
+  const auth = await getSession(request);
 
   if (pathname.startsWith('/api/admin/')) {
     if (!auth || auth.userType !== 'admin') {

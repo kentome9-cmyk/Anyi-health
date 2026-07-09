@@ -1,11 +1,11 @@
-import { NextRequest, NextResponse } from 'next/server';
+﻿import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { requireStoreUser, handleAuthError } from '@/lib/auth';
 import { logError } from '@/lib/logger';
 
 export async function GET(request: NextRequest) {
   try {
-    const session = await requireStoreUser();
+    const session = await requireStoreUser(request);
     const { searchParams } = new URL(request.url);
     const keyword = searchParams.get('keyword');
     const direction = searchParams.get('direction');

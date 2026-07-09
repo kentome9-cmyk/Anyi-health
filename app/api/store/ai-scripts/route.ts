@@ -8,25 +8,40 @@ export async function GET(request: Request) {
     const storeId = url.searchParams.get('storeId');
     const topicId = url.searchParams.get('topicId');
     const type = url.searchParams.get('type');
+    const pageParam = url.searchParams.get('page');
+    const pageSizeParam = url.searchParams.get('pageSize');
+    const hasPagination = pageParam !== null && pageSizeParam !== null;
+    const page = hasPagination ? parseInt(pageParam || '1') : 1;
+    const pageSize = hasPagination ? parseInt(pageSizeParam || '10') : 1000;
 
     if (!storeId) {
       return NextResponse.json({ scripts: [] });
     }
 
-    const scripts = await prisma.scriptRecord.findMany({
-      where: { 
-        storeId, 
-        ...(topicId && { topicId }),
-        ...(type && { type }),
-        content: { not: '' },
-      },
-      orderBy: { createdAt: 'desc' },
-    });
+    const where: any = { 
+      storeId, 
+      content: { not: '' },
+    };
+    if (topicId) where.topicId = topicId;
+    if (type) where.type = type;
 
-    return NextResponse.json({ scripts });
+    const skip = hasPagination ? Math.max(0, (page - 1) * pageSize) : 0;
+    const take = hasPagination ? Math.min(100, pageSize) : undefined;
+
+    const [scripts, total] = await Promise.all([
+      prisma.scriptRecord.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take,
+      }),
+      prisma.scriptRecord.count({ where }),
+    ]);
+
+    return NextResponse.json({ scripts, total });
   } catch (error) {
     logError('Failed to get scripts', error);
-    return NextResponse.json({ scripts: [], error: '获取脚本列表失败' }, { status: 500 });
+    return NextResponse.json({ scripts: [], total: 0, error: '获取脚本列表失败' }, { status: 500 });
   }
 }
 

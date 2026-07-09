@@ -26,11 +26,26 @@ export async function GET(
 
     if (resource.type === 'md' && !resource.content && resource.filePath) {
       try {
-        const fullPath = join(process.cwd(), 'public', resource.filePath);
-        const fileContent = await readFile(fullPath, 'utf-8');
+        let fileContent: string;
+        if (resource.filePath.startsWith('http://') || resource.filePath.startsWith('https://')) {
+          const response = await fetch(resource.filePath);
+          if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+          }
+          fileContent = await response.text();
+        } else {
+          const fullPath = join(process.cwd(), 'public', resource.filePath);
+          fileContent = await readFile(fullPath, 'utf-8');
+        }
         return NextResponse.json({ ...resource, content: fileContent });
-      } catch (e) {
+      } catch (e: any) {
         console.warn(`Failed to read MD file: ${resource.filePath}`, e);
+        if (e.code === 'ENOENT') {
+          return NextResponse.json(
+            { ...resource, content: '', error: '文档文件不存在，请联系管理员重新上传' },
+            { status: 200 }
+          );
+        }
       }
     }
 

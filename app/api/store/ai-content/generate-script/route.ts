@@ -1,4 +1,4 @@
-import { NextResponse } from 'next/server';
+﻿import { NextResponse } from 'next/server';
 import { getOpenAIConfig } from '@/lib/openai';
 import { logError, logDebug } from '@/lib/logger';
 

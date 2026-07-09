@@ -12,7 +12,6 @@
     "db:seed": "npx tsx prisma/seed.ts"
   },
   "dependencies": {
-    "@prisma/client": "^6.0.0",
     "@radix-ui/react-tabs": "^1.1.16",
     "@tailwindcss/postcss": "^4.3.0",
     "@uiw/react-md-editor": "^4.1.1",
@@ -36,10 +35,11 @@
     "zustand": "^5.0.0"
   },
   "devDependencies": {
+    "@prisma/client": "^6.19.3",
     "@types/ali-oss": "^6.23.3",
     "@types/bcryptjs": "^2.4.6",
     "@types/node": "25.9.2",
-    "prisma": "^6.0.0",
+    "prisma": "^6.19.3",
     "typescript": "^5"
   }
 }

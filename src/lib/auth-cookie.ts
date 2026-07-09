@@ -19,12 +19,12 @@ if (!SIGNING_SECRET || SIGNING_SECRET.length < 32) {
   throw new Error('SESSION_SECRET environment variable must be at least 32 characters');
 }
 
-function signData(data: string): string {
+export function signData(data: string): string {
   const signature = crypto.createHmac('sha256', SIGNING_SECRET!).update(data).digest('hex');
   return `${data}.${signature}`;
 }
 
-function verifySignature(signedData: string): string | null {
+export function verifySignature(signedData: string): string | null {
   const [data, signature] = signedData.split('.');
   if (!data || !signature) return null;
   const expectedSignature = crypto.createHmac('sha256', SIGNING_SECRET!).update(data).digest('hex');

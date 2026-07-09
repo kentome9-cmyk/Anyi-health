@@ -164,6 +164,7 @@ export async function POST(request: Request) {
       let filePath: string | null = null;
       let fileSize: string | null = null;
       let pageCount: number | null = null;
+      let content: string | null = null;
 
       if (file) {
         const fileExt = file.name.split('.').pop()?.toLowerCase();
@@ -196,6 +197,10 @@ export async function POST(request: Request) {
         const bytes = await file.arrayBuffer();
         const buffer = Buffer.from(bytes);
 
+        if (fileExt === 'md') {
+          content = buffer.toString('utf-8');
+        }
+
         const ossUrl = await uploadToOss(buffer, fileName);
         if (!ossUrl) {
           const uploadDir = join(process.cwd(), 'public', 'uploads', 'learning');
@@ -223,6 +228,7 @@ export async function POST(request: Request) {
           type,
           category,
           description: description || null,
+          content: type === 'md' ? content : null,
           filePath,
           fileSize,
           pageCount,

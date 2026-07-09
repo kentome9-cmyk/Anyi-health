@@ -21,7 +21,7 @@ interface AIRequestConfig {
 
 export async function POST(request: Request) {
   try {
-    await requireStorePermission('ai_analysis');
+    await requireStorePermission('ai_analysis', request);
     const body = await request.json();
     const { customerId, storeId, messages, reportContent, stream, promptType } = body;
     const type = promptType || 'plan';

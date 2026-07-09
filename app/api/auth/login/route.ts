@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { validateAdmin, validateStoreUser, validateCustomer } from '@/services/auth.service';
 import { setAuthCookie } from '@/lib/auth-cookie';
+import { createToken } from '@/lib/session';
 import { prisma } from '@/lib/prisma';
 import { validateCSRFToken } from '@/lib/csrf';
 import { checkRateLimit, getRateLimitKey } from '@/lib/rate-limiter';
@@ -200,11 +201,13 @@ export async function POST(request: Request) {
           { status: 401 }
         );
       }
-      await setAuthCookie({
-        userType: 'admin',
+      const sessionData = {
+        userType: 'admin' as const,
         userId: user.id,
         storeId: null,
-      });
+      };
+      await setAuthCookie(sessionData);
+      const token = createToken(sessionData);
       await recordLoginLog({
         userType: 'admin',
         userId: user.id,
@@ -218,6 +221,7 @@ export async function POST(request: Request) {
         userId: user.id,
         userName: user.name || user.username,
         storeId: null,
+        token,
       });
     }
 
@@ -253,12 +257,14 @@ export async function POST(request: Request) {
           { status: 401 }
         );
       }
-      await setAuthCookie({
-        userType: 'store_user',
+      const sessionData = {
+        userType: 'store_user' as const,
         userId: user.id,
         storeId: user.storeId,
         permissions: user.permissions || undefined,
-      });
+      };
+      await setAuthCookie(sessionData);
+      const token = createToken(sessionData);
       await recordLoginLog({
         userType: 'store_user',
         userId: user.id,
@@ -271,8 +277,10 @@ export async function POST(request: Request) {
         userType: 'store_user',
         userId: user.id,
         userName: user.name,
+        phone: user.phone,
         storeId: user.storeId,
         permissions: user.permissions,
+        token,
       });
     }
 
@@ -308,11 +316,13 @@ export async function POST(request: Request) {
           { status: 401 }
         );
       }
-      await setAuthCookie({
-        userType: 'customer',
+      const sessionData = {
+        userType: 'customer' as const,
         userId: customer.id,
         storeId: customer.storeId,
-      });
+      };
+      await setAuthCookie(sessionData);
+      const token = createToken(sessionData);
       await recordLoginLog({
         userType: 'customer',
         userId: customer.id,
@@ -325,7 +335,9 @@ export async function POST(request: Request) {
         userType: 'customer',
         userId: customer.id,
         userName: customer.name,
+        phone: customer.phone,
         storeId: customer.storeId,
+        token,
       });
     }
 

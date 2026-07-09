@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { logError } from '@/lib/logger';
+import { requireStoreUser, handleAuthError } from '@/lib/auth';
 
 type RouteContext = {
   params: Promise<{ id: string }>;
@@ -11,6 +12,7 @@ export async function GET(
   { params }: RouteContext
 ) {
   try {
+    await requireStoreUser(request);
     const { id } = await params;
     const record = await prisma.bodyRecord.findUnique({
       where: { id },
@@ -65,6 +67,7 @@ export async function DELETE(
   { params }: RouteContext
 ) {
   try {
+    await requireStoreUser(request);
     const { id } = await params;
     await prisma.bodyRecord.delete({ where: { id } });
     return NextResponse.json({ success: true });

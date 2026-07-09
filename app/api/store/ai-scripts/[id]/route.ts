@@ -1,5 +1,28 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { requireStoreUser, handleAuthError } from '@/lib/auth';
+
+export async function GET(
+  request: Request,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    await requireStoreUser(request);
+    const { id } = await params;
+
+    const script = await prisma.scriptRecord.findUnique({
+      where: { id },
+    });
+
+    if (!script) {
+      return NextResponse.json({ error: '脚本不存在' }, { status: 404 });
+    }
+
+    return NextResponse.json({ script });
+  } catch (error) {
+    return handleAuthError(error);
+  }
+}
 
 export async function DELETE(
   request: Request,

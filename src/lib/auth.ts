@@ -2,8 +2,25 @@ import { NextResponse } from 'next/server';
 import { getAuthCookie, AuthSession } from './auth-cookie';
 import { prisma } from './prisma';
 import { hasPermission, StorePermissionKey } from './store-permissions';
+import { getSessionFromHeaders, UnifiedSession } from './session';
 
-export async function requireAuth(): Promise<AuthSession> {
+function toAuthSession(session: UnifiedSession): AuthSession {
+  return {
+    userType: session.userType,
+    userId: session.userId,
+    storeId: session.storeId,
+    permissions: session.permissions,
+    expiresAt: Date.now() + 7 * 24 * 60 * 60 * 1000,
+  };
+}
+
+export async function requireAuth(request?: Request): Promise<AuthSession> {
+  if (request) {
+    const headerSession = await getSessionFromHeaders(request.headers);
+    if (headerSession) {
+      return toAuthSession(headerSession);
+    }
+  }
   const session = await getAuthCookie();
   if (!session) {
     throw new Error('未登录');
@@ -11,16 +28,16 @@ export async function requireAuth(): Promise<AuthSession> {
   return session;
 }
 
-export async function requireAdmin(): Promise<AuthSession> {
-  const session = await requireAuth();
+export async function requireAdmin(request?: Request): Promise<AuthSession> {
+  const session = await requireAuth(request);
   if (session.userType !== 'admin') {
     throw new Error('权限不足');
   }
   return session;
 }
 
-export async function requireStoreUser(): Promise<{ session: AuthSession; storeId: string }> {
-  const session = await requireAuth();
+export async function requireStoreUser(request?: Request): Promise<{ session: AuthSession; storeId: string }> {
+  const session = await requireAuth(request);
   
   let storeId = session.storeId;
   
@@ -38,8 +55,8 @@ export async function requireStoreUser(): Promise<{ session: AuthSession; storeI
   return { session, storeId };
 }
 
-export async function requireCustomer(): Promise<{ session: AuthSession; customerId: string; storeId: string }> {
-  const session = await requireAuth();
+export async function requireCustomer(request?: Request): Promise<{ session: AuthSession; customerId: string; storeId: string }> {
+  const session = await requireAuth(request);
   if (session.userType !== 'customer') {
     throw new Error('权限不足');
   }
@@ -50,9 +67,10 @@ export async function requireCustomer(): Promise<{ session: AuthSession; custome
 }
 
 export async function requireStorePermission(
-  permission: StorePermissionKey
+  permission: StorePermissionKey,
+  request?: Request
 ): Promise<{ session: AuthSession; storeId: string }> {
-  const { session, storeId } = await requireStoreUser();
+  const { session, storeId } = await requireStoreUser(request);
   
   if (session.userType === 'admin') {
     return { session, storeId };

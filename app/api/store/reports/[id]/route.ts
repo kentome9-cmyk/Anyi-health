@@ -11,7 +11,7 @@ export async function GET(
   { params }: RouteContext
 ) {
   try {
-    const { storeId } = await requireStoreUser();
+    const { storeId } = await requireStoreUser(request);
     const { id } = await params;
     
     const report = await prisma.report.findUnique({

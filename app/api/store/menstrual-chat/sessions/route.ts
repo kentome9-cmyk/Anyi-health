@@ -1,10 +1,10 @@
-import { NextResponse } from 'next/server';
+﻿import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { requireStoreUser, handleAuthError } from '@/lib/auth';
 
 export async function GET(request: Request) {
   try {
-    const { storeId } = await requireStoreUser();
+    const { storeId } = await requireStoreUser(request);
 
     const sessions = await prisma.menstrualChatSession.findMany({
       where: { storeId },
@@ -27,7 +27,7 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    const { storeId } = await requireStoreUser();
+    const { storeId } = await requireStoreUser(request);
     const body = await request.json();
     const title = body.title || '新对话';
 

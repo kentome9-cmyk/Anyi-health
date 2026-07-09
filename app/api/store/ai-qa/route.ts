@@ -6,6 +6,11 @@ export async function GET(request: Request) {
     const { searchParams } = new URL(request.url);
     const keyword = searchParams.get('keyword');
     const category = searchParams.get('category');
+    const pageParam = searchParams.get('page');
+    const pageSizeParam = searchParams.get('pageSize');
+    const hasPagination = pageParam !== null && pageSizeParam !== null;
+    const page = hasPagination ? parseInt(pageParam || '1') : 1;
+    const pageSize = hasPagination ? parseInt(pageSizeParam || '10') : 1000;
 
     const where: any = { isActive: true };
 
@@ -21,12 +26,19 @@ export async function GET(request: Request) {
       where.category = category;
     }
 
-    const qaItems = await prisma.qaItem.findMany({
-      where,
-      orderBy: { hitCount: 'desc' },
-    });
+    const skip = hasPagination ? Math.max(0, (page - 1) * pageSize) : 0;
+    const take = hasPagination ? Math.min(100, pageSize) : undefined;
 
-    // 获取所有分类
+    const [qaItems, total] = await Promise.all([
+      prisma.qaItem.findMany({
+        where,
+        orderBy: { hitCount: 'desc' },
+        skip,
+        take,
+      }),
+      prisma.qaItem.count({ where }),
+    ]);
+
     const categories = await prisma.qaItem.groupBy({
       by: ['category'],
       where: { isActive: true },
@@ -35,12 +47,13 @@ export async function GET(request: Request) {
 
     return NextResponse.json({
       items: qaItems,
+      total,
       categories: categories.map(c => ({ name: c.category, count: c._count })),
     });
   } catch (error) {
     console.error('Get store QA items error:', error);
     return NextResponse.json(
-      { error: '获取问答库失败' },
+      { error: '获取问答库失败', items: [], total: 0 },
       { status: 500 }
     );
   }

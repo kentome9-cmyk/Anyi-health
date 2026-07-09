@@ -1,9 +1,9 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 
-const getStoreId = (req: Request): string | null => {
+const getStoreId = (req: Request, body?: any): string | null => {
   const url = new URL(req.url);
-  const storeId = url.searchParams.get('storeId') || req.headers.get('x-store-id');
+  const storeId = url.searchParams.get('storeId') || req.headers.get('x-store-id') || body?.storeId;
   return storeId;
 };
 
@@ -34,7 +34,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: '必填项缺失' }, { status: 400 });
     }
 
-    const storeId = getStoreId(request);
+    const storeId = getStoreId(request, body);
     if (!storeId) {
       return NextResponse.json({ error: 'storeId 缺失' }, { status: 400 });
     }

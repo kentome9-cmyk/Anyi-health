@@ -4,11 +4,13 @@ import { requireStoreUser, handleAuthError } from '@/lib/auth';
 
 export async function GET(request: NextRequest) {
   try {
-    const { storeId } = await requireStoreUser();
+    const { storeId } = await requireStoreUser(request);
     const { searchParams } = new URL(request.url);
     const keyword = searchParams.get('keyword') || '';
     const direction = searchParams.get('direction') || '';
     const subCategory = searchParams.get('subCategory') || '';
+    const isFilmed = searchParams.get('isFilmed');
+    const isRecommended = searchParams.get('isRecommended');
     const page = parseInt(searchParams.get('page') || '1');
     const pageSize = parseInt(searchParams.get('pageSize') || '10');
 
@@ -27,12 +29,20 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    if (direction) {
+    if (direction && direction !== '全部方向') {
       andConditions.push({ direction: direction });
     }
 
-    if (subCategory) {
+    if (subCategory && subCategory !== '全部子类') {
       andConditions.push({ subCategory: subCategory });
+    }
+
+    if (isFilmed !== null && isFilmed !== undefined) {
+      andConditions.push({ isFilmed: isFilmed === 'true' });
+    }
+
+    if (isRecommended !== null && isRecommended !== undefined) {
+      andConditions.push({ isRecommended: isRecommended === 'true' });
     }
 
     const where: any = {
