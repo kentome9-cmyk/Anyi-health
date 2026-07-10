@@ -32,13 +32,43 @@ export async function GET(request: NextRequest) {
     } else if (session.userType === 'store_user') {
       const user = await prisma.storeUser.findUnique({
         where: { id: session.userId },
-        select: { name: true, phone: true },
+        select: { name: true, phone: true, permissions: true },
       });
       if (!user) {
         return NextResponse.json({ authenticated: false }, { status: 401 });
       }
       userName = user.name;
       phone = user.phone;
+      if (user.permissions) {
+        try {
+          session.permissions = JSON.parse(user.permissions) as string[];
+        } catch {
+          session.permissions = [];
+        }
+      } else {
+        session.permissions = [];
+      }
+
+      const store = await prisma.store.findFirst({
+        where: { storeUserId: session.userId },
+        select: { expirationTime: true },
+      });
+      if (store?.expirationTime) {
+        const now = new Date();
+        if (now > store.expirationTime) {
+          return NextResponse.json({
+            authenticated: true,
+            userType: session.userType,
+            userId: session.userId,
+            userName,
+            phone,
+            storeId: session.storeId,
+            permissions: [],
+            storeExpired: true,
+            expirationTime: store.expirationTime.toISOString(),
+          });
+        }
+      }
     } else if (session.userType === 'customer') {
       const customer = await prisma.customer.findUnique({
         where: { id: session.userId },
