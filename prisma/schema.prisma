@@ -332,6 +332,8 @@ model AiAnalysis {
   customerId      String
   content         String?  @db.Text
   reportContent   String?  @db.Text
+  reportFile      String?  @db.VarChar(500)
+  reportFilePath  String?  @db.Text
   structuredData  Json?
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt

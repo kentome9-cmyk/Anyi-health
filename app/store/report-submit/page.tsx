@@ -2,11 +2,18 @@
 
 import React, { useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Search, Upload, User, X } from '@/lib/icons';
+import { Search, Upload, User, X, Loader2 } from '@/lib/icons';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { useAuthStore } from '@/stores/auth.store';
 import {
   Dialog,
@@ -91,6 +98,8 @@ export default function ReportSubmitPage() {
   const [loadingCustomers, setLoadingCustomers] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [uploadedFile, setUploadedFile] = useState<string | null>(null);
+  const [uploadedFilePath, setUploadedFilePath] = useState<string | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
   const [symptoms, setSymptoms] = useState('');
   const [showValidationError, setShowValidationError] = useState(false);
   const [validationErrors, setValidationErrors] = useState<string[]>([]);
@@ -263,6 +272,8 @@ export default function ReportSubmitPage() {
       height: parseFloat(formData.height) || 0,
       weight: parseFloat(formData.weight) || 0,
       symptoms,
+      reportFile: uploadedFile || null,
+      reportFilePath: uploadedFilePath || null,
     };
 
     const queryParams = new URLSearchParams({
@@ -271,6 +282,42 @@ export default function ReportSubmitPage() {
     });
 
     router.push(`/store/ai-analysis?${queryParams.toString()}`);
+  };
+
+  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 50 * 1024 * 1024) {
+      alert('文件大小超过限制，最大允许 50 MB');
+      return;
+    }
+
+    const formData = new FormData();
+    formData.append('file', file);
+
+    setIsUploading(true);
+
+    try {
+      const res = await fetch('/api/store/upload', {
+        method: 'POST',
+        body: formData,
+      });
+
+      const data = await res.json();
+      if (res.ok) {
+        setUploadedFile(file.name);
+        setUploadedFilePath(data.url);
+      } else {
+        alert(data.error || '文件上传失败');
+      }
+    } catch (error) {
+      console.error('File upload error:', error);
+      alert('文件上传失败，请重试');
+    } finally {
+      setIsUploading(false);
+      event.target.value = '';
+    }
   };
 
   return (
@@ -379,23 +426,36 @@ export default function ReportSubmitPage() {
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-gray-700 mb-1">生产方式</label>
-                  <Input
-                    placeholder="顺产 / 剖宫产"
+                  <Select
                     value={selectedCustomer?.deliveryMethod || formData.delivery}
-                    onChange={(e) => setFormData({ ...formData, delivery: e.target.value })}
+                    onValueChange={(value) => setFormData({ ...formData, delivery: value })}
                     disabled={!!selectedCustomer}
-                    className="h-9"
-                  />
+                  >
+                    <SelectTrigger className="h-9">
+                      <SelectValue placeholder="请选择" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="natural">顺产</SelectItem>
+                      <SelectItem value="cesarean">剖宫产</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-gray-700 mb-1">胎次</label>
-                  <Input
-                    placeholder="第一胎 / 第二胎"
-                    value={selectedCustomer?.birthOrder || formData.gestation}
-                    onChange={(e) => setFormData({ ...formData, gestation: e.target.value })}
+                  <Select
+                    value={selectedCustomer?.birthOrder?.toString() || formData.gestation}
+                    onValueChange={(value) => setFormData({ ...formData, gestation: value })}
                     disabled={!!selectedCustomer}
-                    className="h-9"
-                  />
+                  >
+                    <SelectTrigger className="h-9">
+                      <SelectValue placeholder="请选择" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="1">第一胎</SelectItem>
+                      <SelectItem value="2">第二胎</SelectItem>
+                      <SelectItem value="3">第三胎及以上</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-gray-700 mb-1">身高 (cm)</label>
@@ -454,11 +514,16 @@ export default function ReportSubmitPage() {
                   accept="image/*,.pdf"
                   className="hidden"
                   id="report-upload"
-                  onChange={() => setUploadedFile('医疗报告扫描件.pdf')}
+                  onChange={handleFileUpload}
                 />
                 <label htmlFor="report-upload" className="cursor-pointer block">
                   <div className="border-2 border-dashed border-gray-300 rounded-lg p-4 text-center hover:border-green-500 transition-colors">
-                    {uploadedFile ? (
+                    {isUploading ? (
+                      <div className="text-green-600">
+                        <Loader2 className="h-5 w-5 mx-auto mb-1 animate-spin" />
+                        <h3 className="text-sm font-medium">上传中...</h3>
+                      </div>
+                    ) : uploadedFile ? (
                       <div className="text-green-600">
                         <Upload className="h-5 w-5 mx-auto mb-1" />
                         <h3 className="text-sm font-medium">已上传</h3>

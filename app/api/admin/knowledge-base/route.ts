@@ -131,6 +131,22 @@ export async function GET(request: Request) {
     const keyword = searchParams.get('keyword') || '';
     const action = searchParams.get('action') || '';
 
+    if (action === 'check-embeddings') {
+      const total = await prisma.knowledgeBase.count();
+      const items = await prisma.knowledgeBase.findMany({
+        select: { id: true, embedding: true },
+      });
+      const withEmbedding = items.filter(item => item.embedding !== null && item.embedding !== undefined).length;
+      const withoutEmbedding = total - withEmbedding;
+      
+      return NextResponse.json({
+        total,
+        withEmbedding,
+        withoutEmbedding,
+        message: `知识库共 ${total} 条数据，其中 ${withEmbedding} 条已有向量，${withoutEmbedding} 条缺少向量`,
+      });
+    }
+
     const where: any = {};
     if (keyword) {
       where.OR = [

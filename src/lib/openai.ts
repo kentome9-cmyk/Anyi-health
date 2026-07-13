@@ -60,22 +60,43 @@ async function getEmbeddingConfig(module: string = 'default'): Promise<Embedding
     return getEmbeddingConfig('default');
   }
 
-  if (!settings?.embeddingApiKey || !settings?.embeddingBaseUrl || !settings?.embeddingModelId) {
+  if (!settings) {
     return null;
   }
 
-  let decryptedApiKey: string;
-  try {
-    decryptedApiKey = decrypt(settings.embeddingApiKey);
-  } catch {
-    decryptedApiKey = settings.embeddingApiKey;
+  if (settings.embeddingApiKey && settings.embeddingBaseUrl && settings.embeddingModelId) {
+    let decryptedApiKey: string;
+    try {
+      decryptedApiKey = decrypt(settings.embeddingApiKey);
+    } catch {
+      decryptedApiKey = settings.embeddingApiKey;
+    }
+
+    return {
+      apiKey: decryptedApiKey,
+      baseUrl: settings.embeddingBaseUrl,
+      modelId: settings.embeddingModelId,
+    };
   }
 
-  return {
-    apiKey: decryptedApiKey,
-    baseUrl: settings.embeddingBaseUrl,
-    modelId: settings.embeddingModelId,
-  };
+  if (settings.apiKey && settings.baseUrl && settings.modelId) {
+    let decryptedApiKey: string;
+    try {
+      decryptedApiKey = decrypt(settings.apiKey);
+    } catch {
+      decryptedApiKey = settings.apiKey;
+    }
+
+    console.log(`⚠️ 使用主模型配置作为 embedding 配置（模块: ${module}）`);
+    
+    return {
+      apiKey: decryptedApiKey,
+      baseUrl: settings.baseUrl,
+      modelId: settings.modelId,
+    };
+  }
+
+  return null;
 }
 
 export async function getOpenAIInstance(module: string = 'default') {
@@ -180,13 +201,13 @@ function isNumberArray(value: unknown): value is number[] {
   return Array.isArray(value) && value.every(item => typeof item === 'number');
 }
 
-async function searchByEmbedding<T extends EmbeddableItem>(
+function searchByEmbedding<T extends EmbeddableItem>(
   queryEmbedding: number[],
   items: T[],
   transform: (item: T, similarity: number) => unknown,
   topK: number = 5,
   minSimilarity: number = 0.5
-): Promise<unknown[]> {
+): unknown[] {
   const itemsWithEmbedding = items.filter(item => isNumberArray(item.embedding));
   const matches: unknown[] = [];
 
@@ -223,9 +244,15 @@ export async function searchKnowledgeByEmbedding(
   minSimilarity: number = 0.5
 ): Promise<KnowledgeMatch[]> {
   const queryEmbedding = await getEmbedding(queryText, module);
-  if (!queryEmbedding) return [];
+  if (!queryEmbedding) {
+    console.error('❌ 无法生成查询向量，请检查 embedding 配置');
+    return [];
+  }
+
+  console.log('查询向量生成成功，维度:', queryEmbedding.length);
 
   if (!isCacheValid(knowledgeCache)) {
+    console.log('缓存失效，重新加载知识库数据...');
     knowledgeCache = {
       data: await prisma.knowledgeBase.findMany({
         select: {
@@ -243,10 +270,22 @@ export async function searchKnowledgeByEmbedding(
       }),
       timestamp: Date.now(),
     };
+    
+    const cachedWithEmbedding = knowledgeCache.data.filter(item => item.embedding && Array.isArray(item.embedding) && item.embedding.length > 0).length;
+    console.log(`知识库数据加载完成，共 ${knowledgeCache.data.length} 条，其中 ${cachedWithEmbedding} 条有向量`);
   }
 
   const cacheData = knowledgeCache?.data || [];
-  return searchByEmbedding(queryEmbedding, cacheData, (item, similarity) => ({
+  
+  const itemsWithEmbedding = cacheData.filter(item => isNumberArray(item.embedding));
+  console.log(`可用向量数据: ${itemsWithEmbedding.length} 条`);
+  
+  if (itemsWithEmbedding.length === 0) {
+    console.warn('⚠️ 没有可用的向量数据，请确保知识库已生成向量');
+    return [];
+  }
+
+  const results = searchByEmbedding(queryEmbedding, cacheData, (item, similarity) => ({
     id: item.id,
     project: item.project,
     manifestation: item.manifestation,
@@ -257,34 +296,39 @@ export async function searchKnowledgeByEmbedding(
     carePlan: item.carePlan,
     effectEstimation: item.effectEstimation,
     similarity,
-  }), topK, minSimilarity) as Promise<KnowledgeMatch[]>;
+  }), topK, minSimilarity) as KnowledgeMatch[];
+  
+  console.log(`向量检索完成，找到 ${results.length} 个匹配项`);
+  if (results.length > 0) {
+    console.log('匹配详情:', results.map(r => ({ project: r.project, similarity: r.similarity })));
+  }
+  
+  return results;
 }
 
 export function formatKnowledgeContext(matches: KnowledgeMatch[]): string {
   if (matches.length === 0) return '';
 
-  let context = '【以下是与您问题相关的健康知识库方案，请优先完整使用这些搭配好的方案】：\n\n';
+  const topMatch = matches[0];
 
-  for (let i = 0; i < matches.length; i++) {
-    const m = matches[i];
-    context += `【方案 ${i + 1}】（相似度：${(m.similarity * 100).toFixed(1)}%）\n`;
-    context += `▎适用项目：${m.project}\n`;
-    
-    if (m.manifestation) context += `▎用户表现：${m.manifestation}\n`;
-    if (m.symptom) context += `▎对应症状：${m.symptom}\n`;
-    if (m.pairingEffect) context += `▎搭配效果：${m.pairingEffect}\n`;
-    if (m.pairingItem) context += `▎推荐搭配：${m.pairingItem}\n`;
-    if (m.pairingReason) context += `▎搭配原因：${m.pairingReason}\n`;
-    if (m.carePlan) context += `▎调理规划：${m.carePlan}\n`;
-    if (m.effectEstimation) context += `▎效果预估：${m.effectEstimation}\n`;
-    
-    context += '\n';
-  }
-
+  let context = '【以下是与您问题最匹配的健康知识库方案，请严格按照此方案进行回答】：\n\n';
+  
+  context += `【推荐方案】（相似度：${(topMatch.similarity * 100).toFixed(1)}%）\n`;
+  context += `▎适用项目：${topMatch.project}\n`;
+  
+  if (topMatch.manifestation) context += `▎用户表现：${topMatch.manifestation}\n`;
+  if (topMatch.symptom) context += `▎对应症状：${topMatch.symptom}\n`;
+  if (topMatch.pairingEffect) context += `▎搭配效果：${topMatch.pairingEffect}\n`;
+  if (topMatch.pairingItem) context += `▎推荐搭配：${topMatch.pairingItem}\n`;
+  if (topMatch.pairingReason) context += `▎搭配原因：${topMatch.pairingReason}\n`;
+  if (topMatch.carePlan) context += `▎调理规划：${topMatch.carePlan}\n`;
+  if (topMatch.effectEstimation) context += `▎效果预估：${topMatch.effectEstimation}\n`;
+  
+  context += '\n';
   context += '【重要提示】：\n';
-  context += '1. 请优先从上述方案中选取最合适的1-2个完整方案推荐给客户；\n';
-  context += '2. 推荐时请直接引用方案中的【推荐搭配】，不要拆分或重新组合项目；\n';
-  context += '3. 如有多个方案适用，可综合考虑后推荐最匹配的方案组合；\n';
+  context += '1. 知识库中每一行就是一个完整的搭配方案，只使用上述推荐方案进行回答；\n';
+  context += '2. 不要从多个方案中挑选项目进行组合，严格按照推荐方案中的搭配进行推荐；\n';
+  context += '3. 如果推荐方案中的信息足够回答用户问题，不要再使用其他方案或自行创造方案；\n';
   context += '4. 可结合客户实际情况，对方案中的次数、周期等做适当调整说明。\n';
 
   return context;
@@ -371,7 +415,7 @@ async function searchProductsByEmbedding(
     targetAudience: item.targetAudience,
     usage: item.usage,
     similarity,
-  }), topK, minSimilarity) as Promise<ProductMatch[]>;
+  }), topK, minSimilarity) as ProductMatch[];
 }
 
 async function searchHealthPlansByEmbedding(
@@ -404,7 +448,7 @@ async function searchHealthPlansByEmbedding(
     productCombo: item.productCombo,
     usage: item.usage,
     similarity,
-  }), topK, minSimilarity) as Promise<HealthPlanMatch[]>;
+  }), topK, minSimilarity) as HealthPlanMatch[];
 }
 
 export async function searchMenstrualKnowledgeByEmbedding(
@@ -436,7 +480,7 @@ export async function searchMenstrualKnowledgeByEmbedding(
   }
 
   const menstrualCacheData = menstrualKnowledgeCache?.data || [];
-  const knowledgeMatches = await searchByEmbedding(queryEmbedding, menstrualCacheData, (item, similarity) => ({
+  const knowledgeMatches = searchByEmbedding(queryEmbedding, menstrualCacheData, (item, similarity) => ({
     type: 'knowledge' as const,
     id: item.id,
     category: item.category,

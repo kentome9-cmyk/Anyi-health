@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import * as XLSX from 'xlsx';
 import { requireAdmin, handleAuthError } from '@/lib/auth';
+import { getEmbedding } from '@/lib/openai';
 
 interface KnowledgeRow {
   project: string;
@@ -182,22 +183,50 @@ export async function POST(request: Request) {
     }
 
     const items = parsedData.filter((x) => x && x.project);
-    const created = await prisma.knowledgeBase.createMany({
-      data: items.map((x) => ({
-        project: x.project || '',
-        manifestation: x.manifestation || '',
-        pairingEffect: x.pairingEffect || '',
-        symptom: x.symptom || '',
-        pairingItem: x.pairingItem || '',
-        pairingReason: x.pairingReason || '',
-        carePlan: x.carePlan || '',
-        effectEstimation: x.effectEstimation || '',
-      })),
-    });
+    
+    let successCount = 0;
+    let failCount = 0;
+    
+    for (const item of items) {
+      const text = [
+        item.project,
+        item.manifestation,
+        item.pairingEffect,
+        item.symptom,
+        item.pairingItem,
+        item.pairingReason,
+        item.carePlan,
+        item.effectEstimation,
+      ]
+        .filter(Boolean)
+        .join(' ');
+
+      const embedding = await getEmbedding(text);
+
+      try {
+        await prisma.knowledgeBase.create({
+          data: {
+            project: item.project || '',
+            manifestation: item.manifestation || '',
+            pairingEffect: item.pairingEffect || '',
+            symptom: item.symptom || '',
+            pairingItem: item.pairingItem || '',
+            pairingReason: item.pairingReason || '',
+            carePlan: item.carePlan || '',
+            effectEstimation: item.effectEstimation || '',
+            embedding: embedding || undefined,
+          },
+        });
+        successCount++;
+      } catch {
+        failCount++;
+      }
+    }
 
     return NextResponse.json({
-      count: created.count,
-      message: `成功导入 ${created.count} 条数据`,
+      count: successCount,
+      failCount,
+      message: `成功导入 ${successCount} 条数据，失败 ${failCount} 条`,
     });
   } catch (error) {
     return handleAuthError(error);

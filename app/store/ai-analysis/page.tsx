@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Send, Bot, Sparkles, Heart, Leaf, FileText } from '@/lib/icons';
+import { Send, Bot, Sparkles, Heart, Leaf, FileText, Upload } from '@/lib/icons';
 import ReactMarkdown from 'react-markdown';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -31,6 +31,8 @@ interface Customer {
   height: number;
   weight: number;
   symptoms?: string;
+  reportFile?: string | null;
+  reportFilePath?: string | null;
 }
 
 interface AnalysisResult {
@@ -833,7 +835,10 @@ export default function AiAnalysisPage() {
     dailyAdvice: { diet: [], sleep: [], exercise: [], emotion: [], caution: [] },
     projectRecommendations: { core: [], auxiliary: [], reason: '', cycle: '', effect: '' },
   });
+  const [uploadedImageBase64, setUploadedImageBase64] = useState('');
+  const [isUploadingImage, setIsUploadingImage] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   
   // 防止 AI 请求被重复调用的标志位
   const hasStartedAnalysisRef = useRef(false);
@@ -984,7 +989,7 @@ export default function AiAnalysisPage() {
   const startAIAnalysis = async (customer: Customer) => {
     setIsLoading(true);
 
-    const initialMsg = `客户背景：
+    const textContent = `客户背景：
 - 姓名：${customer.name}
 - 产后天数：${customer.postpartumDays || '未知'}天
 - 生产方式：${customer.deliveryMethod || '未知'}
@@ -992,10 +997,34 @@ export default function AiAnalysisPage() {
 - 身高/体重：${customer.height}cm / ${customer.weight}kg
 - 身体症状：${customer.symptoms || '暂无描述'}`;
 
+    let reportBase64 = '';
+    let reportInfo = '';
+
+    if (customer.reportFilePath) {
+      try {
+        const response = await fetch(customer.reportFilePath);
+        if (response.ok) {
+          const blob = await response.blob();
+          const reader = new FileReader();
+          reportBase64 = await new Promise((resolve) => {
+            reader.onloadend = () => resolve(reader.result as string);
+            reader.readAsDataURL(blob);
+          });
+        }
+      } catch (error) {
+        console.error('Failed to convert report to base64:', error);
+      }
+      reportInfo = `
+- 医疗报告：${customer.reportFile || '已上传'}
+- 报告链接：${customer.reportFilePath}`;
+    }
+
+    const displayMsg = textContent + reportInfo;
+
     const userMessage: Message = {
       id: Date.now().toString(),
       role: 'user',
-      content: initialMsg,
+      content: displayMsg,
       timestamp: new Date(),
     };
 
@@ -1013,8 +1042,11 @@ export default function AiAnalysisPage() {
       const reply = await requestAIStream({
         customerId: customer.id,
         storeId: customer.storeId || storeId,
-        messages: [{ role: 'user', content: initialMsg }],
+        messages: [{ role: 'user', content: displayMsg }],
         reportContent: customer.symptoms || '',
+        reportFile: customer.reportFile || '',
+        reportFilePath: customer.reportFilePath || '',
+        reportBase64,
         promptType: 'plan',
       });
       setAnalysisResult(parseAIResponse(reply || mockAIReply));
@@ -1119,6 +1151,104 @@ export default function AiAnalysisPage() {
     }
   };
 
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !customerInfo) return;
+
+    if (file.size > 10 * 1024 * 1024) {
+      alert('图片大小不能超过10MB');
+      return;
+    }
+
+    const validTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'application/pdf'];
+    if (!validTypes.includes(file.type)) {
+      alert('请上传图片或PDF文件');
+      return;
+    }
+
+    setIsUploadingImage(true);
+
+    try {
+      const reader = new FileReader();
+      const base64 = await new Promise<string>((resolve, reject) => {
+        reader.onloadend = () => resolve(reader.result as string);
+        reader.onerror = reject;
+        reader.readAsDataURL(file);
+      });
+
+      const response = await fetch('/api/store/upload', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          fileName: file.name,
+          fileBase64: base64,
+        }),
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        setUploadedImageBase64(base64);
+        
+        const userMessage: Message = {
+          id: Date.now().toString(),
+          role: 'user',
+          content: `📷 上传了报告图片：${result.fileName}`,
+          timestamp: new Date(),
+        };
+
+        const aiLoadingMessage: Message = {
+          id: (Date.now() + 1).toString(),
+          role: 'ai',
+          content: '',
+          timestamp: new Date(),
+          loading: true,
+        };
+
+        setMessages((prev) => [...prev, userMessage, aiLoadingMessage]);
+
+        const reply = await requestAIStream({
+          customerId: customerInfo.id,
+          storeId: customerInfo.storeId || storeId,
+          messages: [
+            { 
+              role: 'user', 
+              content: [
+                { type: 'text', text: `客户背景：\n- 姓名：${customerInfo.name}\n- 产后天数：${customerInfo.postpartumDays || '未知'}天\n- 生产方式：${customerInfo.deliveryMethod || '未知'}\n- 身体症状：${inputMessage || '根据图片分析'}` },
+                { type: 'image_url', image_url: { url: base64 } }
+              ]
+            }
+          ],
+          reportContent: inputMessage || '',
+          reportFile: result.fileName,
+          reportFilePath: result.fileUrl,
+          reportBase64: base64,
+          promptType: 'plan',
+        });
+
+        if (reply) {
+          setAnalysisResult(parseAIResponse(reply));
+        }
+      } else {
+        alert('图片上传失败');
+      }
+    } catch (error) {
+      console.error('Image upload failed:', error);
+      alert('图片上传失败');
+    } finally {
+      setIsUploadingImage(false);
+      setInputMessage('');
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+    }
+  };
+
+  const handleImageUploadClick = () => {
+    fileInputRef.current?.click();
+  };
+
   const handleExportReport = async () => {
     if (!customerInfo) return;
     const finalStoreId = customerInfo.storeId || storeId;
@@ -1191,7 +1321,9 @@ export default function AiAnalysisPage() {
             </div>
             <div>
               <span className="text-xs text-gray-500">方式</span>
-              <p className="text-sm font-medium text-gray-900">{customerInfo?.deliveryMethod || '-'}</p>
+              <p className="text-sm font-medium text-gray-900">
+                {customerInfo?.deliveryMethod === 'natural' ? '顺产' : customerInfo?.deliveryMethod === 'cesarean' ? '剖宫产' : customerInfo?.deliveryMethod || '-'}
+              </p>
             </div>
             <div>
               <span className="text-xs text-gray-500">胎次</span>
@@ -1241,17 +1373,35 @@ export default function AiAnalysisPage() {
                           <span>AI 思考中...</span>
                         </div>
                       ) : message.loading ? (
-                        // 加载中只显示纯文本，避免不完整的 markdown 导致显示异常
                         <div className="text-sm text-gray-700 whitespace-pre-wrap leading-relaxed">
                           {message.content}
                           <span className="inline-block w-1 animate-pulse text-green-600 ml-0.5">|</span>
                         </div>
                       ) : (
-                        // 加载完成后显示完整的 markdown
                         <div className="text-sm text-gray-700">
-                          <ReactMarkdown>
-                            {message.content.replace(/^```(?:\w+)?\n?/, '').replace(/\n?```$/, '')}
-                          </ReactMarkdown>
+                          {(() => {
+                            const content = message.content.replace(/^```(?:\w+)?\n?/, '').replace(/\n?```$/, '');
+                            const thinkingMatch = content.match(/思考过程：([\s\S]*?)(?=\n\n## |\n\n### |$)/);
+                            
+                            if (thinkingMatch) {
+                              const thinking = thinkingMatch[1].trim();
+                              const finalReply = content.replace(/思考过程：[\s\S]*?(?=\n\n## |\n\n### |$)/, '').trim();
+                              
+                              return (
+                                <div>
+                                  <div className="mb-3 p-2 bg-blue-50 rounded-md border border-blue-200">
+                                    <div className="text-xs font-medium text-blue-700 mb-1">🔍 AI 思考过程</div>
+                                    <div className="text-xs text-blue-800 whitespace-pre-wrap">{thinking}</div>
+                                  </div>
+                                  {finalReply && (
+                                    <ReactMarkdown>{finalReply}</ReactMarkdown>
+                                  )}
+                                </div>
+                              );
+                            }
+                            
+                            return <ReactMarkdown>{content}</ReactMarkdown>;
+                          })()}
                         </div>
                       )}
                     </div>
@@ -1260,6 +1410,14 @@ export default function AiAnalysisPage() {
                 <div ref={messagesEndRef} />
               </div>
               <div className="flex gap-2 border-t border-gray-200 pt-2 flex-shrink-0">
+                <Button
+                  variant="outline"
+                  className="h-8 px-3 text-gray-600 hover:text-gray-900 hover:bg-gray-100"
+                  onClick={handleImageUploadClick}
+                  disabled={isLoading || isUploadingImage}
+                >
+                  <Upload className="h-3 w-3" />
+                </Button>
                 <Input
                   placeholder="输入问题..."
                   value={inputMessage}
@@ -1275,6 +1433,13 @@ export default function AiAnalysisPage() {
                 >
                   <Send className="h-3 w-3" />
                 </Button>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/*,.pdf"
+                  onChange={handleImageUpload}
+                  className="hidden"
+                />
               </div>
             </CardContent>
           </Card>
