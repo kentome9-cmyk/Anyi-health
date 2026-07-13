@@ -14,14 +14,38 @@ interface EmbeddingConfig {
 }
 
 const CACHE_DURATION = 5 * 60 * 1000;
-let knowledgeCache: { data: any[]; timestamp: number } | null = null;
-let menstrualKnowledgeCache: { data: any[]; timestamp: number } | null = null;
-let productCache: { data: any[]; timestamp: number } | null = null;
-let healthPlanCache: { data: any[]; timestamp: number } | null = null;
+const MAX_CACHE_ITEMS = 1000;
 
-function isCacheValid(cache: { timestamp: number } | null): boolean {
+interface CacheEntry<T> {
+  data: T[];
+  timestamp: number;
+}
+
+let knowledgeCache: CacheEntry<any> | null = null;
+let menstrualKnowledgeCache: CacheEntry<any> | null = null;
+let productCache: CacheEntry<any> | null = null;
+let healthPlanCache: CacheEntry<any> | null = null;
+
+let knowledgeCacheLock = false;
+let menstrualKnowledgeCacheLock = false;
+let productCacheLock = false;
+let healthPlanCacheLock = false;
+
+function isCacheValid(cache: CacheEntry<any> | null): boolean {
   if (!cache) return false;
   return Date.now() - cache.timestamp < CACHE_DURATION;
+}
+
+async function withLock<T>(lock: { value: boolean }, fn: () => Promise<T>): Promise<T> {
+  while (lock.value) {
+    await new Promise(resolve => setTimeout(resolve, 50));
+  }
+  lock.value = true;
+  try {
+    return await fn();
+  } finally {
+    lock.value = false;
+  }
 }
 
 async function getOpenAIConfig(module: string = 'default'): Promise<OpenAIConfig | null> {
@@ -99,6 +123,30 @@ async function getEmbeddingConfig(module: string = 'default'): Promise<Embedding
   return null;
 }
 
+function createFetchWithTimeout(timeout: number = 30000) {
+  return async (url: string, options: RequestInit = {}) => {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), timeout);
+    
+    try {
+      const response = await fetch(url, {
+        ...options,
+        signal: controller.signal,
+      });
+      return response;
+    } catch (error) {
+      if (error instanceof DOMException && error.name === 'AbortError') {
+        throw new Error('请求超时');
+      }
+      throw error;
+    } finally {
+      clearTimeout(timeoutId);
+    }
+  };
+}
+
+const fetchWithTimeout = createFetchWithTimeout(60000);
+
 export async function getOpenAIInstance(module: string = 'default') {
   const config = await getOpenAIConfig(module);
 
@@ -108,10 +156,10 @@ export async function getOpenAIInstance(module: string = 'default') {
 
   return {
     config,
-    async chat(options: { messages: any[]; temperature?: number }) {
+    async chat(options: { messages: any[]; temperature?: number; stream?: boolean }) {
       const apiUrl = `${config.baseUrl.replace(/\/$/, '')}/chat/completions`;
       
-      const response = await fetch(apiUrl, {
+      const response = await fetchWithTimeout(apiUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -121,14 +169,16 @@ export async function getOpenAIInstance(module: string = 'default') {
           model: config.modelId,
           messages: options.messages,
           temperature: options.temperature ?? 0.7,
+          stream: options.stream ?? false,
         }),
       });
 
       if (!response.ok) {
-        throw new Error(`AI API error: ${response.status}`);
+        const errorText = await response.text().catch(() => '');
+        throw new Error(`AI API error: ${response.status} ${errorText}`);
       }
 
-      return response.json();
+      return response;
     },
   };
 }
@@ -143,7 +193,7 @@ export async function getEmbedding(text: string, module: string = 'default'): Pr
   const apiUrl = `${config.baseUrl.replace(/\/$/, '')}/embeddings`;
 
   try {
-    const response = await fetch(apiUrl, {
+    const response = await fetchWithTimeout(apiUrl, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -156,7 +206,8 @@ export async function getEmbedding(text: string, module: string = 'default'): Pr
     });
 
     if (!response.ok) {
-      throw new Error(`Embedding API error: ${response.status}`);
+      const errorText = await response.text().catch(() => '');
+      throw new Error(`Embedding API error: ${response.status} ${errorText}`);
     }
 
     const data = await response.json();
@@ -168,10 +219,6 @@ export async function getEmbedding(text: string, module: string = 'default'): Pr
 }
 
 export { getOpenAIConfig, getEmbeddingConfig };
-
-// ============================================
-// 向量检索相关函数
-// ============================================
 
 function cosineSimilarity(a: number[], b: number[]): number {
   if (a.length !== b.length) return 0;
@@ -249,36 +296,42 @@ export async function searchKnowledgeByEmbedding(
     return [];
   }
 
-  console.log('查询向量生成成功，维度:', queryEmbedding.length);
-
   if (!isCacheValid(knowledgeCache)) {
-    console.log('缓存失效，重新加载知识库数据...');
-    knowledgeCache = {
-      data: await prisma.knowledgeBase.findMany({
-        select: {
-          id: true,
-          project: true,
-          manifestation: true,
-          pairingEffect: true,
-          symptom: true,
-          pairingItem: true,
-          pairingReason: true,
-          carePlan: true,
-          effectEstimation: true,
-          embedding: true,
-        },
-      }),
-      timestamp: Date.now(),
-    };
-    
-    const cachedWithEmbedding = knowledgeCache.data.filter(item => item.embedding && Array.isArray(item.embedding) && item.embedding.length > 0).length;
-    console.log(`知识库数据加载完成，共 ${knowledgeCache.data.length} 条，其中 ${cachedWithEmbedding} 条有向量`);
+    await withLock({ value: knowledgeCacheLock }, async () => {
+      if (!isCacheValid(knowledgeCache)) {
+        console.log('缓存失效，重新加载知识库数据...');
+        try {
+          const data = await prisma.knowledgeBase.findMany({
+            select: {
+              id: true,
+              project: true,
+              manifestation: true,
+              pairingEffect: true,
+              symptom: true,
+              pairingItem: true,
+              pairingReason: true,
+              carePlan: true,
+              effectEstimation: true,
+              embedding: true,
+            },
+            take: MAX_CACHE_ITEMS,
+          });
+          knowledgeCache = {
+            data,
+            timestamp: Date.now(),
+          };
+          const cachedWithEmbedding = knowledgeCache.data.filter(item => item.embedding && Array.isArray(item.embedding) && item.embedding.length > 0).length;
+          console.log(`知识库数据加载完成，共 ${knowledgeCache.data.length} 条，其中 ${cachedWithEmbedding} 条有向量`);
+        } catch (error) {
+          console.error('加载知识库缓存失败:', error);
+        }
+      }
+    });
   }
 
   const cacheData = knowledgeCache?.data || [];
   
   const itemsWithEmbedding = cacheData.filter(item => isNumberArray(item.embedding));
-  console.log(`可用向量数据: ${itemsWithEmbedding.length} 条`);
   
   if (itemsWithEmbedding.length === 0) {
     console.warn('⚠️ 没有可用的向量数据，请确保知识库已生成向量');
@@ -297,11 +350,6 @@ export async function searchKnowledgeByEmbedding(
     effectEstimation: item.effectEstimation,
     similarity,
   }), topK, minSimilarity) as KnowledgeMatch[];
-  
-  console.log(`向量检索完成，找到 ${results.length} 个匹配项`);
-  if (results.length > 0) {
-    console.log('匹配详情:', results.map(r => ({ project: r.project, similarity: r.similarity })));
-  }
   
   return results;
 }
@@ -333,10 +381,6 @@ export function formatKnowledgeContext(matches: KnowledgeMatch[]): string {
 
   return context;
 }
-
-// ============================================
-// 月经助手知识库相关类型和函数
-// ============================================
 
 export interface MenstrualKnowledgeMatch {
   type: 'knowledge' | 'product' | 'healthPlan';
@@ -383,23 +427,30 @@ async function searchProductsByEmbedding(
   minSimilarity: number = 0.5
 ): Promise<ProductMatch[]> {
   if (!isCacheValid(productCache)) {
-    productCache = {
-      data: await prisma.product.findMany({
-        select: {
-          id: true,
-          category: true,
-          name: true,
-          spec: true,
-          price: true,
-          ingredients: true,
-          effects: true,
-          targetAudience: true,
-          usage: true,
-          embedding: true,
-        },
-      }),
-      timestamp: Date.now(),
-    };
+    await withLock({ value: productCacheLock }, async () => {
+      if (!isCacheValid(productCache)) {
+        try {
+          const data = await prisma.product.findMany({
+            select: {
+              id: true,
+              category: true,
+              name: true,
+              spec: true,
+              price: true,
+              ingredients: true,
+              effects: true,
+              targetAudience: true,
+              usage: true,
+              embedding: true,
+            },
+            take: MAX_CACHE_ITEMS,
+          });
+          productCache = { data, timestamp: Date.now() };
+        } catch (error) {
+          console.error('加载产品缓存失败:', error);
+        }
+      }
+    });
   }
 
   const productCacheData = productCache?.data || [];
@@ -424,19 +475,26 @@ async function searchHealthPlansByEmbedding(
   minSimilarity: number = 0.5
 ): Promise<HealthPlanMatch[]> {
   if (!isCacheValid(healthPlanCache)) {
-    healthPlanCache = {
-      data: await prisma.healthPlan.findMany({
-        select: {
-          id: true,
-          type: true,
-          targetAudience: true,
-          productCombo: true,
-          usage: true,
-          embedding: true,
-        },
-      }),
-      timestamp: Date.now(),
-    };
+    await withLock({ value: healthPlanCacheLock }, async () => {
+      if (!isCacheValid(healthPlanCache)) {
+        try {
+          const data = await prisma.healthPlan.findMany({
+            select: {
+              id: true,
+              type: true,
+              targetAudience: true,
+              productCombo: true,
+              usage: true,
+              embedding: true,
+            },
+            take: MAX_CACHE_ITEMS,
+          });
+          healthPlanCache = { data, timestamp: Date.now() };
+        } catch (error) {
+          console.error('加载健康方案缓存失败:', error);
+        }
+      }
+    });
   }
 
   const healthPlanCacheData = healthPlanCache?.data || [];
@@ -461,22 +519,29 @@ export async function searchMenstrualKnowledgeByEmbedding(
   if (!queryEmbedding) return [];
 
   if (!isCacheValid(menstrualKnowledgeCache)) {
-    menstrualKnowledgeCache = {
-      data: await prisma.menstrualKnowledgeBase.findMany({
-        select: {
-          id: true,
-          category: true,
-          symptom: true,
-          cause: true,
-          suggestion: true,
-          dietAdvice: true,
-          lifestyleAdvice: true,
-          attention: true,
-          embedding: true,
-        },
-      }),
-      timestamp: Date.now(),
-    };
+    await withLock({ value: menstrualKnowledgeCacheLock }, async () => {
+      if (!isCacheValid(menstrualKnowledgeCache)) {
+        try {
+          const data = await prisma.menstrualKnowledgeBase.findMany({
+            select: {
+              id: true,
+              category: true,
+              symptom: true,
+              cause: true,
+              suggestion: true,
+              dietAdvice: true,
+              lifestyleAdvice: true,
+              attention: true,
+              embedding: true,
+            },
+            take: MAX_CACHE_ITEMS,
+          });
+          menstrualKnowledgeCache = { data, timestamp: Date.now() };
+        } catch (error) {
+          console.error('加载月经知识库缓存失败:', error);
+        }
+      }
+    });
   }
 
   const menstrualCacheData = menstrualKnowledgeCache?.data || [];
@@ -563,4 +628,11 @@ export function formatMenstrualKnowledgeContext(matches: MenstrualCombinedMatch[
   context += '3. 如果找不到合适的产品或方案，请明确告知用户当前知识库中没有针对其情况的合适产品，不要编造。\n';
 
   return context;
+}
+
+export function clearCaches(): void {
+  knowledgeCache = null;
+  menstrualKnowledgeCache = null;
+  productCache = null;
+  healthPlanCache = null;
 }
