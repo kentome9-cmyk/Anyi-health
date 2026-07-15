@@ -5,7 +5,7 @@ import { getOpenAIConfig } from '@/lib/openai';
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { identityId, storeId } = body;
+    const { identityId, storeId, topicCount } = body;
 
     let identity = null;
 
@@ -38,7 +38,9 @@ export async function POST(request: Request) {
 
     const apiUrl = `${config.baseUrl.replace(/\/$/, '')}/chat/completions`;
 
-    const systemPrompt = `你是一位专业的短视频选题策划专家。请根据用户提供的创作者身份，严格贴合账号赛道、人设、受众，批量生成8-10个精准匹配的选题方向。
+    const targetCount = topicCount || 10;
+
+    const systemPrompt = `你是一位专业的短视频选题策划专家。请根据用户提供的创作者身份，严格贴合账号赛道、人设、受众，批量生成${targetCount}个精准匹配的选题方向。
 
 重要原则：
 1. 选题必须完全符合内容赛道方向，禁止跨领域
@@ -65,7 +67,7 @@ export async function POST(request: Request) {
 ${identity.videoTone ? `视频调性：${identity.videoTone}` : ''}
 ${identity.videoDuration ? `视频时长：${identity.videoDuration}` : ''}
 
-请严格贴合上述创作者身份，生成8-10个精准匹配的短视频选题方向。请确保选题标题简洁有力，内容简要说明核心价值。`;
+请严格贴合上述创作者身份，生成${targetCount}个精准匹配的短视频选题方向。请确保选题标题简洁有力，内容简要说明核心价值。`;
 
     const response = await fetch(apiUrl, {
       method: 'POST',
