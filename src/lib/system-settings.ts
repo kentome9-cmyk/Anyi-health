@@ -16,6 +16,7 @@ export const SYSTEM_SETTING_DEFAULTS = {
   ossRegion: '',
   ossBucket: '',
   ossEndpoint: '',
+  ossCdnDomain: '',
   ossAccessKeyId: '',
   ossAccessKeySecret: '',
   privacyPolicy: '',

@@ -51,7 +51,7 @@ export async function POST(request: NextRequest) {
     const ext = file.name.split('.').pop()?.toLowerCase() || 'dat';
     const fileName = `${timestamp}-${file.name}`;
     
-    let url = await uploadToOss(buffer, `reports/${fileName}`, 'reports');
+    let url = await uploadToOss(buffer, fileName, 'reports');
     
     if (!url) {
       url = await uploadToLocal(buffer, fileName);

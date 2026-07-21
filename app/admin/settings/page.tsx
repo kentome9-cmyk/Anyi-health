@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Save, CheckCircle, Settings, Palette, Phone, FileText, Globe, Lock, MessageCircle } from '@/lib/icons';
+import { Save, CheckCircle, Settings, Palette, Phone, FileText, Globe, Lock, MessageCircle, TestTube, Loader2 } from '@/lib/icons';
 import { cn } from '@/lib/utils';
 import type { SystemSettingsMap } from '@/lib/system-settings';
 import { ColorPickerField } from './ColorPickerField';
@@ -34,6 +34,8 @@ export default function AdminSettingsPage() {
   const [submitting, setSubmitting] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState('');
+  const [ossTesting, setOssTesting] = useState(false);
+  const [ossTestResult, setOssTestResult] = useState<{ success: boolean; message: string } | null>(null);
 
   useEffect(() => {
     load();
@@ -76,11 +78,28 @@ export default function AdminSettingsPage() {
       }
       setSettings(data);
       setSaved(true);
+      setOssTestResult(null);
       setTimeout(() => setSaved(false), 3000);
     } catch (err) {
       setError('网络错误');
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const handleOssTest = async () => {
+    setOssTesting(true);
+    setOssTestResult(null);
+    try {
+      const res = await fetch('/api/admin/settings/oss-test', {
+        method: 'POST',
+      });
+      const data = await res.json();
+      setOssTestResult(data);
+    } catch (err) {
+      setOssTestResult({ success: false, message: '网络错误' });
+    } finally {
+      setOssTesting(false);
     }
   };
 
@@ -302,6 +321,16 @@ export default function AdminSettingsPage() {
                     />
                   </div>
                   <div className="space-y-2">
+                    <Label htmlFor="ossCdnDomain">CDN 加速域名（可选）</Label>
+                    <Input
+                      id="ossCdnDomain"
+                      value={settings.ossCdnDomain}
+                      onChange={(e) => handleChange('ossCdnDomain', e.target.value)}
+                      placeholder="如：cdn.example.com"
+                      className={fieldClass}
+                    />
+                  </div>
+                  <div className="space-y-2">
                     <Label htmlFor="ossAccessKeyId">AccessKey ID</Label>
                     <Input
                       id="ossAccessKeyId"
@@ -323,6 +352,45 @@ export default function AdminSettingsPage() {
                       type="password"
                     />
                   </div>
+                </div>
+                <div className="flex flex-col gap-2 pt-2 border-t border-gray-100">
+                  <Button
+                    variant="outline"
+                    onClick={handleOssTest}
+                    disabled={ossTesting || !settings.ossRegion || !settings.ossBucket || !settings.ossAccessKeyId || !settings.ossAccessKeySecret}
+                    className="self-start"
+                  >
+                    {ossTesting ? (
+                      <>
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        测试中...
+                      </>
+                    ) : (
+                      <>
+                        <TestTube className="h-4 w-4 mr-2" />
+                        测试连接
+                      </>
+                    )}
+                  </Button>
+                  {ossTestResult && (
+                    <div
+                      className={cn(
+                        'px-3 py-2 rounded-md text-sm',
+                        ossTestResult.success
+                          ? 'bg-green-50 text-green-700 border border-green-200'
+                          : 'bg-red-50 text-red-700 border border-red-200'
+                      )}
+                    >
+                      {ossTestResult.success ? (
+                        <span className="flex items-center gap-1">
+                          <CheckCircle className="h-4 w-4" />
+                          {ossTestResult.message}
+                        </span>
+                      ) : (
+                        ossTestResult.message
+                      )}
+                    </div>
+                  )}
                 </div>
               </CardContent>
             </Card>

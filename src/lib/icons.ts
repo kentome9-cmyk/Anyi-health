@@ -81,4 +81,5 @@ export {
   XCircle,
   Palette,
   Globe,
+  TestTube,
 } from 'lucide-react';
