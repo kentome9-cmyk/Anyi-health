@@ -118,7 +118,7 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
-    await requireAdmin();
+    await requireAdmin(request);
     const contentType = request.headers.get('content-type') || '';
 
     if (contentType.includes('multipart/form-data')) {
@@ -293,7 +293,7 @@ export async function POST(request: Request) {
 
 export async function PUT(request: Request) {
   try {
-    await requireAdmin();
+    await requireAdmin(request);
     const body = await request.json();
     const action = body.action || '';
 
