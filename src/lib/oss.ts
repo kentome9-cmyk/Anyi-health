@@ -17,10 +17,15 @@ export async function getOssClient(): Promise<OSS | null> {
   cachedCdnDomain = ossCdnDomain || '';
 
   try {
+    let endpoint = ossEndpoint;
+    if (!endpoint && ossRegion) {
+      endpoint = `oss-${ossRegion}.aliyuncs.com`;
+    }
+
     ossClient = new OSS({
       region: ossRegion,
       bucket: ossBucket,
-      endpoint: ossEndpoint || undefined,
+      endpoint: endpoint || undefined,
       accessKeyId: ossAccessKeyId,
       accessKeySecret: ossAccessKeySecret,
       secure: true,
