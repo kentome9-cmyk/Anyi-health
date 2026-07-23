@@ -201,7 +201,7 @@ export async function POST(request: Request) {
           content = buffer.toString('utf-8');
         }
 
-        const ossUrl = await uploadToOss(buffer, fileName);
+        const ossUrl = await uploadToOss(buffer, fileName, 'learning');
         if (!ossUrl) {
           const uploadDir = join(process.cwd(), 'public', 'uploads', 'learning');
           await mkdir(uploadDir, { recursive: true });
