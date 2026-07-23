@@ -5,10 +5,23 @@ let ossClient: OSS | null = null;
 let cachedCdnDomain: string = '';
 
 export async function getOssClient(): Promise<OSS | null> {
-  if (ossClient) return ossClient;
+  if (ossClient) {
+    console.log('[OSS] Reusing existing client');
+    return ossClient;
+  }
+
+  console.log('[OSS] Creating new client...');
 
   const settings = await getSystemSettings();
   const { ossRegion, ossBucket, ossEndpoint, ossCdnDomain, ossAccessKeyId, ossAccessKeySecret } = settings;
+
+  console.log('[OSS] Settings:', { 
+    ossRegion: ossRegion ? '***' : 'empty', 
+    ossBucket: ossBucket ? '***' : 'empty', 
+    ossEndpoint: ossEndpoint ? '***' : 'empty', 
+    ossAccessKeyId: ossAccessKeyId ? '***' : 'empty', 
+    ossAccessKeySecret: ossAccessKeySecret ? '***' : 'empty' 
+  });
 
   if (!ossRegion || !ossBucket || !ossAccessKeyId || !ossAccessKeySecret) {
     console.error('[OSS] Configuration missing:', { ossRegion, ossBucket, ossEndpoint, ossAccessKeyId, ossAccessKeySecret });
@@ -25,7 +38,7 @@ export async function getOssClient(): Promise<OSS | null> {
 
     console.log('[OSS] Creating client with:', { region: ossRegion, bucket: ossBucket, endpoint });
 
-    ossClient = new OSS({
+    const client = new OSS({
       region: ossRegion,
       bucket: ossBucket,
       endpoint: endpoint || undefined,
@@ -33,9 +46,12 @@ export async function getOssClient(): Promise<OSS | null> {
       accessKeySecret: ossAccessKeySecret,
       secure: true,
     });
-    return ossClient;
+
+    ossClient = client;
+    return client;
   } catch (error) {
     console.error('[OSS] Failed to create client:', error);
+    ossClient = null;
     return null;
   }
 }
