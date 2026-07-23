@@ -1,8 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { requireAdmin, handleAuthError } from '@/lib/auth';
 import { getPresignedUrl } from '@/lib/oss';
 
 export async function POST(request: NextRequest) {
   try {
+    await requireAdmin(request);
     const { fileName, folder } = await request.json();
     
     if (!fileName) {
@@ -22,6 +24,10 @@ export async function POST(request: NextRequest) {
     });
   } catch (error) {
     console.error('[OSS Upload] Error:', error);
+    const authResponse = handleAuthError(error);
+    if (authResponse.status !== 500) {
+      return authResponse;
+    }
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }

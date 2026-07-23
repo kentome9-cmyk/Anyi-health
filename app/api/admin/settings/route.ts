@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getAuthCookie } from '@/lib/auth-cookie';
 import { getSystemSettings, updateSystemSettings } from '@/lib/system-settings';
+import { resetOssClient } from '@/lib/oss';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -48,6 +49,9 @@ export async function PUT(request: Request) {
     }
 
     const settings = await updateSystemSettings(body, updatedBy);
+    if (Object.keys(body).some((key) => key.startsWith('oss'))) {
+      resetOssClient();
+    }
     return NextResponse.json(settings);
   } catch (error) {
     console.error('[admin/settings] error:', error);

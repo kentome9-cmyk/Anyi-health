@@ -4,6 +4,54 @@ import { getSystemSettings } from './system-settings';
 let ossClient: OSS | null = null;
 let cachedCdnDomain: string = '';
 
+function trimSlashes(value: string): string {
+  return value.trim().replace(/\/+$/, '');
+}
+
+function getHost(value: string): string {
+  const trimmed = trimSlashes(value);
+  try {
+    return new URL(trimmed).host;
+  } catch {
+    return trimmed.replace(/^https?:\/\//i, '').split('/')[0];
+  }
+}
+
+function normalizeOssRegion(region: string): string {
+  const value = getHost(region).toLowerCase();
+  const endpointRegion = value.match(/(?:^|\.)((?:vpc100-)?oss-[a-z0-9-]+)(?:-internal)?\.aliyuncs\.com$/);
+  if (endpointRegion) {
+    return endpointRegion[1];
+  }
+  if (value.startsWith('oss-') || value.startsWith('vpc100-oss-')) {
+    return value;
+  }
+  return `oss-${value}`;
+}
+
+function normalizeOssEndpoint(endpoint: string, bucket: string): string | undefined {
+  if (!endpoint.trim()) {
+    return undefined;
+  }
+
+  const host = getHost(endpoint).toLowerCase();
+  const normalizedBucket = bucket.trim().toLowerCase();
+  const hostWithoutBucket = normalizedBucket && host.startsWith(`${normalizedBucket}.`)
+    ? host.slice(normalizedBucket.length + 1)
+    : host;
+
+  const aliyunHost = hostWithoutBucket.match(/^((?:vpc100-)?(?:oss-)?[a-z0-9-]+)(-internal)?\.aliyuncs\.com$/);
+  if (!aliyunHost) {
+    return hostWithoutBucket;
+  }
+
+  const regionHost = aliyunHost[1].startsWith('oss-') || aliyunHost[1].startsWith('vpc100-oss-')
+    ? aliyunHost[1]
+    : `oss-${aliyunHost[1]}`;
+
+  return `${regionHost}${aliyunHost[2] || ''}.aliyuncs.com`;
+}
+
 export async function getOssClient(): Promise<OSS | null> {
   if (ossClient) {
     console.log('[OSS] Reusing existing client');
@@ -31,17 +79,16 @@ export async function getOssClient(): Promise<OSS | null> {
   cachedCdnDomain = ossCdnDomain || '';
 
   try {
-    // 不手动设置endpoint，让SDK根据region自动生成正确的URL格式
-    // SDK会自动使用虚拟主机模式：bucket.oss-${region}.aliyuncs.com
-    // 如果用户自定义了endpoint（如内网地址），则使用用户配置
-    const endpoint = ossEndpoint || undefined;
+    const region = normalizeOssRegion(ossRegion);
+    const bucket = ossBucket.trim();
+    const endpoint = normalizeOssEndpoint(ossEndpoint, bucket);
 
-    console.log('[OSS] Creating client with:', { region: ossRegion, bucket: ossBucket, endpoint });
+    console.log('[OSS] Creating client with:', { region, bucket, endpoint });
 
     const client = new OSS({
-      region: ossRegion,
-      bucket: ossBucket,
-      endpoint: endpoint,
+      region,
+      bucket,
+      endpoint,
       accessKeyId: ossAccessKeyId,
       accessKeySecret: ossAccessKeySecret,
       secure: true,

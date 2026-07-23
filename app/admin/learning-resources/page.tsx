@@ -336,9 +336,9 @@ export default function AdminLearningResourcesPage() {
         uploadType = 'video';
       }
 
-      let filePath = editingItem?.filePath || '';
+      let filePath = '';
 
-      if (formData.file) {
+      if (process.env.NEXT_PUBLIC_DIRECT_OSS_UPLOAD === 'true' && formData.file) {
         const uuid = crypto.randomUUID();
         const fileName = `${uuid}.${fileExt}`;
 
@@ -380,6 +380,9 @@ export default function AdminLearningResourcesPage() {
       }
       if (filePath) {
         formDataObj.append('filePath', filePath);
+      }
+      if (formData.file && !filePath) {
+        formDataObj.append('file', formData.file);
       }
 
       let res;
