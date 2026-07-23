@@ -336,6 +336,41 @@ export default function AdminLearningResourcesPage() {
         uploadType = 'video';
       }
 
+      let filePath = editingItem?.filePath || '';
+
+      if (formData.file) {
+        const uuid = crypto.randomUUID();
+        const fileName = `${uuid}.${fileExt}`;
+
+        const presignedRes = await fetch('/api/admin/oss-upload', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ fileName, folder: 'learning' }),
+        });
+
+        if (!presignedRes.ok) {
+          const err = await presignedRes.json().catch(() => ({}));
+          showToast('error', err.error || '获取上传地址失败');
+          setSubmitting(false);
+          return;
+        }
+
+        const { uploadUrl, fileUrl } = await presignedRes.json();
+
+        const uploadRes = await fetch(uploadUrl, {
+          method: 'PUT',
+          body: formData.file,
+        });
+
+        if (!uploadRes.ok) {
+          showToast('error', '上传文件到OSS失败');
+          setSubmitting(false);
+          return;
+        }
+
+        filePath = fileUrl;
+      }
+
       const formDataObj = new FormData();
       formDataObj.append('title', formData.title.trim());
       formDataObj.append('type', uploadType);
@@ -343,8 +378,8 @@ export default function AdminLearningResourcesPage() {
       if (formData.description.trim()) {
         formDataObj.append('description', formData.description.trim());
       }
-      if (formData.file) {
-        formDataObj.append('file', formData.file);
+      if (filePath) {
+        formDataObj.append('filePath', filePath);
       }
 
       let res;

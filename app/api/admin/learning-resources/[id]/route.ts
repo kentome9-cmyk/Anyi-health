@@ -80,7 +80,30 @@ export async function PUT(
       let pageCount = existingResource?.pageCount || null;
       let content: string | null = null;
 
-      if (file) {
+      const directFilePath = formData.get('filePath') as string | null;
+
+      if (directFilePath) {
+        if (existingResource?.filePath && existingResource.filePath !== directFilePath) {
+          if (isOssUrl(existingResource.filePath)) {
+            const objectKey = getObjectKeyFromUrl(existingResource.filePath);
+            if (objectKey) {
+              await deleteFromOss(objectKey).catch(() => {});
+            }
+          } else {
+            const oldFullPath = join(process.cwd(), 'public', existingResource.filePath);
+            try {
+              await stat(oldFullPath);
+              await unlink(oldFullPath);
+            } catch {
+              console.warn(`Cannot delete old file: ${oldFullPath}`);
+            }
+          }
+        }
+        filePath = directFilePath;
+        if (file) {
+          fileSize = formatFileSize(file.size);
+        }
+      } else if (file) {
         if (existingResource?.filePath) {
           if (isOssUrl(existingResource.filePath)) {
             const objectKey = getObjectKeyFromUrl(existingResource.filePath);

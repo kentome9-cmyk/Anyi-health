@@ -166,7 +166,14 @@ export async function POST(request: Request) {
       let pageCount: number | null = null;
       let content: string | null = null;
 
-      if (file) {
+      const directFilePath = formData.get('filePath') as string | null;
+
+      if (directFilePath) {
+        filePath = directFilePath;
+        if (file) {
+          fileSize = formatFileSize(file.size);
+        }
+      } else if (file) {
         const fileExt = file.name.split('.').pop()?.toLowerCase();
         if (!fileExt || !ALLOWED_EXTENSIONS.includes(fileExt)) {
           return NextResponse.json(

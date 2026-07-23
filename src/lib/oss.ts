@@ -69,28 +69,15 @@ export async function uploadToOss(buffer: Buffer, fileName: string, folder: stri
   }
 
   const objectKey = `${folder}/${fileName}`;
-  const fileSize = buffer.length;
 
   try {
-    console.log('[OSS] uploading:', objectKey, 'size:', fileSize);
-    
-    let result;
-    if (fileSize > 10 * 1024 * 1024) {
-      console.log('[OSS] Using multipartUpload for large file');
-      result = await client.multipartUpload(objectKey, buffer, {
-        partSize: 10 * 1024 * 1024,
-      });
-    } else {
-      result = await client.put(objectKey, buffer);
-    }
+    console.log('[OSS] uploading:', objectKey);
+    const result = await client.put(objectKey, buffer);
 
     if (result.res.status === 200) {
-      let url = (result as { url?: string }).url || '';
-      if (!url) {
-        url = `https://${objectKey}`;
-      }
+      let url = result.url;
       const cdnDomain = getCdnDomain();
-      if (cdnDomain && url) {
+      if (cdnDomain) {
         try {
           const parsed = new URL(url);
           url = `${parsed.protocol}//${cdnDomain}${parsed.pathname}`;
@@ -98,12 +85,43 @@ export async function uploadToOss(buffer: Buffer, fileName: string, folder: stri
         }
       }
       console.log('[OSS] upload success:', url);
-      return url || null;
+      return url;
     }
     console.error('[OSS] upload failed:', result.res.status);
     return null;
   } catch (error) {
     console.error('[OSS] upload error:', error);
+    return null;
+  }
+}
+
+export async function getPresignedUrl(fileName: string, folder: string = 'anyiai'): Promise<{ url: string; objectKey: string; cdnUrl: string } | null> {
+  const client = await getOssClient();
+  if (!client) {
+    return null;
+  }
+
+  const objectKey = `${folder}/${fileName}`;
+
+  try {
+    const url = client.signatureUrl(objectKey, {
+      expires: 3600,
+      method: 'PUT',
+    });
+
+    let cdnUrl = url;
+    const cdnDomain = getCdnDomain();
+    if (cdnDomain) {
+      try {
+        const parsed = new URL(url);
+        cdnUrl = `${parsed.protocol}//${cdnDomain}${parsed.pathname}`;
+      } catch {
+      }
+    }
+
+    return { url, objectKey, cdnUrl };
+  } catch (error) {
+    console.error('[OSS] getPresignedUrl error:', error);
     return null;
   }
 }
