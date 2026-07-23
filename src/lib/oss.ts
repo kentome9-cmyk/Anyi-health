@@ -45,6 +45,7 @@ export async function getOssClient(): Promise<OSS | null> {
       accessKeyId: ossAccessKeyId,
       accessKeySecret: ossAccessKeySecret,
       secure: true,
+      timeout: 300000,
     });
 
     ossClient = client;
@@ -68,14 +69,28 @@ export async function uploadToOss(buffer: Buffer, fileName: string, folder: stri
   }
 
   const objectKey = `${folder}/${fileName}`;
+  const fileSize = buffer.length;
 
   try {
-    console.log('[OSS] uploading:', objectKey);
-    const result = await client.put(objectKey, buffer);
+    console.log('[OSS] uploading:', objectKey, 'size:', fileSize);
+    
+    let result;
+    if (fileSize > 10 * 1024 * 1024) {
+      console.log('[OSS] Using multipartUpload for large file');
+      result = await client.multipartUpload(objectKey, buffer, {
+        partSize: 10 * 1024 * 1024,
+      });
+    } else {
+      result = await client.put(objectKey, buffer);
+    }
+
     if (result.res.status === 200) {
-      let url = result.url;
+      let url = (result as { url?: string }).url || '';
+      if (!url) {
+        url = `https://${objectKey}`;
+      }
       const cdnDomain = getCdnDomain();
-      if (cdnDomain) {
+      if (cdnDomain && url) {
         try {
           const parsed = new URL(url);
           url = `${parsed.protocol}//${cdnDomain}${parsed.pathname}`;
@@ -83,7 +98,7 @@ export async function uploadToOss(buffer: Buffer, fileName: string, folder: stri
         }
       }
       console.log('[OSS] upload success:', url);
-      return url;
+      return url || null;
     }
     console.error('[OSS] upload failed:', result.res.status);
     return null;
