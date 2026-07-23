@@ -202,7 +202,9 @@ export async function POST(request: Request) {
         }
 
         const ossUrl = await uploadToOss(buffer, fileName, 'learning');
+        console.log('[Learning Resource] ossUrl result:', ossUrl);
         if (!ossUrl) {
+          console.log('[Learning Resource] OSS upload failed, falling back to local storage');
           const uploadDir = join(process.cwd(), 'public', 'uploads', 'learning');
           await mkdir(uploadDir, { recursive: true });
           const fullPath = resolve(uploadDir, fileName);
