@@ -31,23 +31,17 @@ export async function getOssClient(): Promise<OSS | null> {
   cachedCdnDomain = ossCdnDomain || '';
 
   try {
-    let endpoint = ossEndpoint;
-    if (!endpoint && ossRegion) {
-      // 使用标准的阿里云OSS endpoint格式：${region}.aliyuncs.com
-      // SDK会自动在前面加上bucket名，生成虚拟主机模式的URL
-      endpoint = `${ossRegion}.aliyuncs.com`;
-    } else if (endpoint) {
-      // 如果用户配置了endpoint，确保它是区域域名格式（不含bucket名）
-      // 移除可能的"oss-"前缀，避免SDK生成重复的前缀
-      endpoint = endpoint.replace(/^oss-/, '');
-    }
+    // 不手动设置endpoint，让SDK根据region自动生成正确的URL格式
+    // SDK会自动使用虚拟主机模式：bucket.oss-${region}.aliyuncs.com
+    // 如果用户自定义了endpoint（如内网地址），则使用用户配置
+    const endpoint = ossEndpoint || undefined;
 
     console.log('[OSS] Creating client with:', { region: ossRegion, bucket: ossBucket, endpoint });
 
     const client = new OSS({
       region: ossRegion,
       bucket: ossBucket,
-      endpoint: endpoint || undefined,
+      endpoint: endpoint,
       accessKeyId: ossAccessKeyId,
       accessKeySecret: ossAccessKeySecret,
       secure: true,
