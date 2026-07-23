@@ -142,13 +142,18 @@ export async function uploadToOss(buffer: Buffer, fileName: string, folder: stri
   }
 }
 
-export async function getPresignedUrl(fileName: string, folder: string = 'anyiai'): Promise<{ url: string; objectKey: string; cdnUrl: string } | null> {
+export async function getPresignedUrl(
+  fileName: string,
+  folder: string = 'anyiai',
+  contentType?: string
+): Promise<{ url: string; objectKey: string; cdnUrl: string; headers: Record<string, string> } | null> {
   const client = await getOssClient();
   if (!client) {
     return null;
   }
 
   const objectKey = `${folder}/${fileName}`;
+  const headers: Record<string, string> = contentType ? { 'Content-Type': contentType } : {};
 
   try {
     // 使用SDK的signatureUrl方法，确保签名格式正确
@@ -156,6 +161,7 @@ export async function getPresignedUrl(fileName: string, folder: string = 'anyiai
     const url = client.signatureUrl(objectKey, {
       expires: 3600,
       method: 'PUT',
+      ...headers,
     });
 
     console.log('[OSS] Generated presigned URL:', url);
@@ -170,7 +176,7 @@ export async function getPresignedUrl(fileName: string, folder: string = 'anyiai
       }
     }
 
-    return { url, objectKey, cdnUrl };
+    return { url, objectKey, cdnUrl, headers };
   } catch (error) {
     console.error('[OSS] getPresignedUrl error:', error);
     return null;

@@ -341,11 +341,12 @@ export default function AdminLearningResourcesPage() {
       if (process.env.NEXT_PUBLIC_DIRECT_OSS_UPLOAD === 'true' && formData.file) {
         const uuid = crypto.randomUUID();
         const fileName = `${uuid}.${fileExt}`;
+        const contentType = formData.file.type || 'application/octet-stream';
 
         const presignedRes = await fetch('/api/admin/oss-upload', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ fileName, folder: 'learning' }),
+          body: JSON.stringify({ fileName, folder: 'learning', contentType }),
         });
 
         if (!presignedRes.ok) {
@@ -355,10 +356,11 @@ export default function AdminLearningResourcesPage() {
           return;
         }
 
-        const { uploadUrl, fileUrl } = await presignedRes.json();
+        const { uploadUrl, fileUrl, headers } = await presignedRes.json();
 
         const uploadRes = await fetch(uploadUrl, {
           method: 'PUT',
+          headers: headers || { 'Content-Type': contentType },
           body: formData.file,
         });
 
