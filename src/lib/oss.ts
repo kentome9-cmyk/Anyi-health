@@ -68,8 +68,10 @@ export async function testOssConnection(): Promise<{ success: boolean; message: 
   }
 
   try {
-    const result = await client.list({ 'max-keys': 1 }, {});
+    const testKey = `test/connection-${Date.now()}.txt`;
+    const result = await client.put(testKey, Buffer.from('test connection'));
     if (result.res.status === 200) {
+      await client.delete(testKey).catch(() => {});
       const cdnDomain = getCdnDomain();
       if (cdnDomain) {
         return { success: true, message: `OSS连接成功！已配置CDN域名: ${cdnDomain}` };
