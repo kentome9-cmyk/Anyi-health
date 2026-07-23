@@ -11,6 +11,7 @@ export async function getOssClient(): Promise<OSS | null> {
   const { ossRegion, ossBucket, ossEndpoint, ossCdnDomain, ossAccessKeyId, ossAccessKeySecret } = settings;
 
   if (!ossRegion || !ossBucket || !ossAccessKeyId || !ossAccessKeySecret) {
+    console.error('[OSS] Configuration missing:', { ossRegion, ossBucket, ossEndpoint, ossAccessKeyId, ossAccessKeySecret });
     return null;
   }
 
@@ -22,6 +23,8 @@ export async function getOssClient(): Promise<OSS | null> {
       endpoint = `oss-${ossRegion}.aliyuncs.com`;
     }
 
+    console.log('[OSS] Creating client with:', { region: ossRegion, bucket: ossBucket, endpoint });
+
     ossClient = new OSS({
       region: ossRegion,
       bucket: ossBucket,
@@ -31,7 +34,8 @@ export async function getOssClient(): Promise<OSS | null> {
       secure: true,
     });
     return ossClient;
-  } catch {
+  } catch (error) {
+    console.error('[OSS] Failed to create client:', error);
     return null;
   }
 }
@@ -42,11 +46,15 @@ export function getCdnDomain(): string {
 
 export async function uploadToOss(buffer: Buffer, fileName: string, folder: string = 'anyiai'): Promise<string | null> {
   const client = await getOssClient();
-  if (!client) return null;
+  if (!client) {
+    console.warn('[OSS] uploadToOss: client is null, falling back to local storage');
+    return null;
+  }
 
   const objectKey = `${folder}/${fileName}`;
 
   try {
+    console.log('[OSS] uploading:', objectKey);
     const result = await client.put(objectKey, buffer);
     if (result.res.status === 200) {
       let url = result.url;
@@ -58,10 +66,13 @@ export async function uploadToOss(buffer: Buffer, fileName: string, folder: stri
         } catch {
         }
       }
+      console.log('[OSS] upload success:', url);
       return url;
     }
+    console.error('[OSS] upload failed:', result.res.status);
     return null;
-  } catch {
+  } catch (error) {
+    console.error('[OSS] upload error:', error);
     return null;
   }
 }
