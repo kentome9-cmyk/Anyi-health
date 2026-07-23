@@ -206,25 +206,28 @@ export async function POST(request: Request) {
 
         if (fileExt === 'md') {
           content = buffer.toString('utf-8');
-        }
-
-        const ossUrl = await uploadToOss(buffer, fileName, 'learning');
-        console.log('[Learning Resource] ossUrl result:', ossUrl);
-        if (!ossUrl) {
-          console.log('[Learning Resource] OSS upload failed, falling back to local storage');
-          const uploadDir = join(process.cwd(), 'public', 'uploads', 'learning');
-          await mkdir(uploadDir, { recursive: true });
-          const fullPath = resolve(uploadDir, fileName);
-          await writeFile(fullPath, buffer);
-          filePath = `/uploads/learning/${fileName}`;
+          filePath = null;
         } else {
-          filePath = ossUrl;
+          const ossUrl = await uploadToOss(buffer, fileName, 'learning');
+          console.log('[Learning Resource] ossUrl result:', ossUrl);
+          if (!ossUrl) {
+            console.log('[Learning Resource] OSS upload failed, falling back to local storage');
+            const uploadDir = join(process.cwd(), 'public', 'uploads', 'learning');
+            await mkdir(uploadDir, { recursive: true });
+            const fullPath = resolve(uploadDir, fileName);
+            await writeFile(fullPath, buffer);
+            filePath = `/uploads/learning/${fileName}`;
+          } else {
+            filePath = ossUrl;
+          }
         }
 
         fileSize = formatFileSize(file.size);
 
         if (fileExt === 'pdf') {
-          const tempPath = join(process.cwd(), 'public', 'uploads', 'learning', fileName);
+          const uploadDir = join(process.cwd(), 'public', 'uploads', 'learning');
+          await mkdir(uploadDir, { recursive: true });
+          const tempPath = resolve(uploadDir, fileName);
           await writeFile(tempPath, buffer);
           pageCount = await getPdfPageCount(tempPath);
           await unlink(tempPath).catch(() => {});

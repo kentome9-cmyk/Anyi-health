@@ -72,13 +72,13 @@ export async function PUT(
 
       const existingResource = await prisma.learningResource.findUnique({
         where: { id },
-        select: { filePath: true, type: true, fileSize: true, pageCount: true },
+        select: { filePath: true, type: true, fileSize: true, pageCount: true, content: true },
       });
 
       let filePath = existingResource?.filePath || null;
       let fileSize = existingResource?.fileSize || null;
       let pageCount = existingResource?.pageCount || null;
-      let content: string | null = null;
+      let content: string | null = existingResource?.content || null;
 
       const directFilePath = formData.get('filePath') as string | null;
 
@@ -137,17 +137,18 @@ export async function PUT(
 
         if (fileExt === 'md') {
           content = buffer.toString('utf-8');
-        }
-
-        const ossUrl = await uploadToOss(buffer, fileName, 'learning');
-        if (!ossUrl) {
-          const uploadDir = join(process.cwd(), 'public', 'uploads', 'learning');
-          await mkdir(uploadDir, { recursive: true });
-          const fullPath = join(uploadDir, fileName);
-          await writeFile(fullPath, buffer);
-          filePath = `/uploads/learning/${fileName}`;
+          filePath = null;
         } else {
-          filePath = ossUrl;
+          const ossUrl = await uploadToOss(buffer, fileName, 'learning');
+          if (!ossUrl) {
+            const uploadDir = join(process.cwd(), 'public', 'uploads', 'learning');
+            await mkdir(uploadDir, { recursive: true });
+            const fullPath = join(uploadDir, fileName);
+            await writeFile(fullPath, buffer);
+            filePath = `/uploads/learning/${fileName}`;
+          } else {
+            filePath = ossUrl;
+          }
         }
 
         fileSize = formatFileSize(file.size);

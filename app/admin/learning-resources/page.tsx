@@ -338,7 +338,12 @@ export default function AdminLearningResourcesPage() {
 
       let filePath = '';
 
-      if (process.env.NEXT_PUBLIC_DIRECT_OSS_UPLOAD === 'true' && formData.file) {
+      const shouldDirectUpload =
+        process.env.NEXT_PUBLIC_DIRECT_OSS_UPLOAD === 'true' &&
+        formData.file &&
+        ['mp4', 'webm', 'mov'].includes(fileExt);
+
+      if (shouldDirectUpload && formData.file) {
         const uuid = crypto.randomUUID();
         const fileName = `${uuid}.${fileExt}`;
         const contentType = formData.file.type || 'application/octet-stream';
@@ -662,7 +667,7 @@ export default function AdminLearningResourcesPage() {
                       </div>
                     </TableCell>
                     <TableCell>
-                      {resource.filePath ? (
+                      {resource.filePath || resource.type === 'md' ? (
                         <div className="text-xs text-gray-500">
                           <div>{resource.fileSize || '-'}</div>
                           {resource.pageCount && (

@@ -82,4 +82,7 @@ export {
   Palette,
   Globe,
   TestTube,
+  BarChart3,
+  Activity,
+  TrendingUp,
 } from 'lucide-react';

@@ -20,6 +20,14 @@ const TABLE_STATS_DEF = [
   { key: 'operationLog', label: '操作日志' },
 ];
 
+interface DailyTrend {
+  date: string;
+  loginCount: number;
+  operationCount: number;
+  aiAnalysisCount: number;
+  chatMessageCount: number;
+}
+
 export async function GET() {
   try {
     const [
@@ -60,6 +68,51 @@ export async function GET() {
       })
     );
 
+    const dailyTrends: DailyTrend[] = [];
+    for (let i = 6; i >= 0; i--) {
+      const date = new Date(Date.now() - i * 24 * 60 * 60 * 1000);
+      const startOfDay = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+      const endOfDay = new Date(date.getFullYear(), date.getMonth(), date.getDate() + 1);
+
+      const [loginCount, operationCount, aiAnalysisCount, chatMessageCount] = await Promise.all([
+        prisma.loginLog.count({
+          where: { createdAt: { gte: startOfDay, lt: endOfDay } },
+        }),
+        prisma.operationLog.count({
+          where: { createdAt: { gte: startOfDay, lt: endOfDay } },
+        }),
+        prisma.aiAnalysis.count({
+          where: { createdAt: { gte: startOfDay, lt: endOfDay } },
+        }),
+        prisma.menstrualChatMessage.count({
+          where: { createdAt: { gte: startOfDay, lt: endOfDay } },
+        }),
+      ]);
+
+      dailyTrends.push({
+        date: `${date.getMonth() + 1}/${date.getDate()}`,
+        loginCount,
+        operationCount,
+        aiAnalysisCount,
+        chatMessageCount,
+      });
+    }
+
+    const stores = await prisma.store.findMany({
+      select: { id: true, storeName: true },
+      take: 5,
+    });
+
+    const storeStats = await Promise.all(
+      stores.map(async (store) => ({
+        id: store.id,
+        name: store.storeName,
+        customerCount: await prisma.customer.count({ where: { storeId: store.id } }),
+        planCount: await prisma.plan.count({ where: { storeId: store.id } }),
+        aiAnalysisCount: await prisma.aiAnalysis.count({ where: { storeId: store.id } }),
+      }))
+    ).then((items) => items.sort((a, b) => b.customerCount - a.customerCount));
+
     return NextResponse.json({
       totalStores,
       totalCustomers,
@@ -69,6 +122,8 @@ export async function GET() {
       lastBackupAt: lastBackupLog?.createdAt?.toISOString() ?? null,
       loginLog7d: loginLog7d,
       operationLog7d: operationLog7d,
+      dailyTrends,
+      storeStats,
     });
   } catch (error) {
     console.error('Get stats error:', error);
