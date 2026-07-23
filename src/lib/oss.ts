@@ -33,7 +33,13 @@ export async function getOssClient(): Promise<OSS | null> {
   try {
     let endpoint = ossEndpoint;
     if (!endpoint && ossRegion) {
-      endpoint = `oss-${ossRegion}.aliyuncs.com`;
+      // 使用标准的阿里云OSS endpoint格式：${region}.aliyuncs.com
+      // SDK会自动在前面加上bucket名，生成虚拟主机模式的URL
+      endpoint = `${ossRegion}.aliyuncs.com`;
+    } else if (endpoint) {
+      // 如果用户配置了endpoint，确保它是区域域名格式（不含bucket名）
+      // 移除可能的"oss-"前缀，避免SDK生成重复的前缀
+      endpoint = endpoint.replace(/^oss-/, '');
     }
 
     console.log('[OSS] Creating client with:', { region: ossRegion, bucket: ossBucket, endpoint });
@@ -104,10 +110,14 @@ export async function getPresignedUrl(fileName: string, folder: string = 'anyiai
   const objectKey = `${folder}/${fileName}`;
 
   try {
+    // 使用SDK的signatureUrl方法，确保签名格式正确
+    // 关键：SDK会根据endpoint自动选择虚拟主机或路径模式
     const url = client.signatureUrl(objectKey, {
       expires: 3600,
       method: 'PUT',
     });
+
+    console.log('[OSS] Generated presigned URL:', url);
 
     let cdnUrl = url;
     const cdnDomain = getCdnDomain();
