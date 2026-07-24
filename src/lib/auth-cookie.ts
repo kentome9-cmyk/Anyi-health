@@ -8,6 +8,8 @@ export interface AuthSession {
   userId: string;
   storeId: string | null;
   permissions?: string[];
+  isDemo?: boolean;
+  demoBatchId?: string | null;
   expiresAt: number;
 }
 

@@ -113,6 +113,8 @@ export function LoginForm({
         userName: data.userName,
         storeId: data.storeId,
         permissions: data.permissions,
+        isDemo: data.isDemo,
+        demoBatchId: data.demoBatchId,
       });
 
       if (data.userType === 'admin') {

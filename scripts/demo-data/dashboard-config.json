@@ -1,0 +1,22 @@
+{
+  "totalStores": 58,
+  "totalCustomers": 12860,
+  "totalPlans": 9360,
+  "activePlans": 2140,
+  "reports": 11280,
+  "aiAnalyses": 5280,
+  "scriptRecords": 1860,
+  "topics": 960,
+  "knowledgeBase": 320,
+  "qaItems": 680,
+  "prompts": 48,
+  "learningResources": 120,
+  "chatSessions": 2480,
+  "chatMessages": 18600,
+  "trendTotals": {
+    "loginCount": 1240,
+    "operationCount": 6800,
+    "aiAnalysisCount": 1850,
+    "chatMessageCount": 9200
+  }
+}

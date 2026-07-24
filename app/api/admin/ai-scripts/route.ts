@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { requireAdmin, handleAuthError } from '@/lib/auth';
+import { applyDemoStoreFilter, assertWritableAdmin, requireAdmin, handleAuthError } from '@/lib/auth';
 import { logError } from '@/lib/logger';
 import * as XLSX from 'xlsx';
 
 export async function GET(request: NextRequest) {
   try {
-    await requireAdmin();
+    const session = await requireAdmin(request);
     const { searchParams } = new URL(request.url);
     const storeId = searchParams.get('storeId');
     const type = searchParams.get('type');
@@ -39,6 +39,7 @@ export async function GET(request: NextRequest) {
     }
     if (direction) where.direction = direction;
     if (subCategory) where.subCategory = subCategory;
+    applyDemoStoreFilter(where, session);
 
     const [scripts, total] = await Promise.all([
       prisma.scriptRecord.findMany({
@@ -77,7 +78,8 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    await requireAdmin();
+    const session = await requireAdmin(request);
+    assertWritableAdmin(session);
     const contentType = request.headers.get('content-type') || '';
     console.log(`[DEBUG] POST /api/admin/ai-scripts, contentType: ${contentType}`);
 

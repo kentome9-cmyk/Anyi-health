@@ -1,14 +1,14 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import type { Prisma } from '@prisma/client';
-import { requireAdmin, handleAuthError } from '@/lib/auth';
+import { isDemoAdmin, requireAdmin, handleAuthError } from '@/lib/auth';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 export async function GET(request: Request) {
   try {
-    await requireAdmin();
+    const session = await requireAdmin(request);
     const url = new URL(request.url);
     const page = Math.max(1, parseInt(url.searchParams.get('page') || '1', 10));
     const pageSize = Math.min(100, Math.max(1, parseInt(url.searchParams.get('pageSize') || '20', 10)));
@@ -25,6 +25,23 @@ export async function GET(request: Request) {
     if (successParam === 'false') where.success = false;
     if (userName) where.userName = { contains: userName, mode: 'insensitive' };
     if (ip) where.ip = { contains: ip };
+
+    if (!isDemoAdmin(session)) {
+      const [demoAdmins, demoStoreUsers] = await Promise.all([
+        prisma.admin.findMany({ where: { isDemo: true }, select: { id: true } }),
+        prisma.storeUser.findMany({ where: { isDemo: true }, select: { id: true } }),
+      ]);
+      const demoUserIds = [...demoAdmins, ...demoStoreUsers].map((item) => item.id);
+      where.AND = [
+        ...(Array.isArray(where.AND) ? where.AND : where.AND ? [where.AND] : []),
+        {
+          NOT: [
+            { userId: { in: demoUserIds } },
+            { userName: { startsWith: 'demo_' } },
+          ],
+        },
+      ];
+    }
 
     if (startDate || endDate) {
       where.createdAt = {};

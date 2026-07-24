@@ -1,9 +1,11 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import type { Prisma } from '@prisma/client';
+import { isDemoAdmin, requireAdmin } from '@/lib/auth';
 
 export async function GET(request: Request) {
   try {
+    const session = await requireAdmin(request);
     const { searchParams } = new URL(request.url);
     const page = parseInt(searchParams.get('page') || '1', 10);
     const pageSize = parseInt(searchParams.get('pageSize') || '20', 10);
@@ -33,6 +35,24 @@ export async function GET(request: Request) {
             { targetName: { contains: keyword, mode: 'insensitive' } },
             { detail: { contains: keyword, mode: 'insensitive' } },
             { targetId: { contains: keyword, mode: 'insensitive' } },
+          ],
+        },
+      ];
+    }
+
+    if (!isDemoAdmin(session)) {
+      const [demoAdmins, demoStoreUsers] = await Promise.all([
+        prisma.admin.findMany({ where: { isDemo: true }, select: { id: true } }),
+        prisma.storeUser.findMany({ where: { isDemo: true }, select: { id: true } }),
+      ]);
+      const demoUserIds = [...demoAdmins, ...demoStoreUsers].map((item) => item.id);
+      where.AND = [
+        ...(Array.isArray(where.AND) ? where.AND : where.AND ? [where.AND] : []),
+        {
+          NOT: [
+            { operatorId: { in: demoUserIds } },
+            { operatorName: { startsWith: 'demo_' } },
+            { detail: { contains: 'DEMO_INVESTOR_V1' } },
           ],
         },
       ];

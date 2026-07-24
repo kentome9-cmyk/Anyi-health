@@ -1,13 +1,18 @@
 import { NextResponse } from 'next/server';
 import { Prisma } from '@prisma/client';
 import { prisma } from '@/lib/prisma';
+import { assertWritableAdmin, isDemoAdmin, requireAdmin } from '@/lib/auth';
 import { hashPassword } from '@/services/auth.service';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-export async function GET() {
+export async function GET(request: Request) {
+  const session = await requireAdmin(request);
   const admins = await prisma.admin.findMany({
+    where: isDemoAdmin(session)
+      ? { isDemo: true, demoBatchId: session.demoBatchId }
+      : { isDemo: false },
     select: {
       id: true,
       username: true,
@@ -22,6 +27,8 @@ export async function GET() {
 
 export async function POST(request: Request) {
   try {
+    const session = await requireAdmin(request);
+    assertWritableAdmin(session);
     const body = await request.json();
     const username = (body.username || '').trim();
     const password = body.password || '';

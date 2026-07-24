@@ -8,6 +8,8 @@ export interface UnifiedSession {
   userId: string;
   storeId: string | null;
   permissions?: string[];
+  isDemo?: boolean;
+  demoBatchId?: string | null;
 }
 
 export async function getSessionFromRequest(
@@ -45,6 +47,8 @@ export async function getSessionFromHeaders(
         userId: session.userId,
         storeId: session.storeId,
         permissions: session.permissions,
+        isDemo: session.isDemo,
+        demoBatchId: session.demoBatchId,
       };
     }
     return null;
@@ -52,12 +56,14 @@ export async function getSessionFromHeaders(
 
   const cookieSession = await getAuthCookie();
   if (cookieSession) {
-    return {
-      userType: cookieSession.userType,
-      userId: cookieSession.userId,
-      storeId: cookieSession.storeId,
-      permissions: cookieSession.permissions,
-    };
+      return {
+        userType: cookieSession.userType,
+        userId: cookieSession.userId,
+        storeId: cookieSession.storeId,
+        permissions: cookieSession.permissions,
+        isDemo: cookieSession.isDemo,
+        demoBatchId: cookieSession.demoBatchId,
+      };
   }
 
   return null;

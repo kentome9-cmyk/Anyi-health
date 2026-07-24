@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { requireAdmin, handleAuthError } from '@/lib/auth';
+import { applyDemoStoreFilter, assertWritableAdmin, requireAdmin, handleAuthError } from '@/lib/auth';
 
 type RouteContext = {
   params: Promise<{ id: string }>;
@@ -11,11 +11,11 @@ export async function GET(
   { params }: RouteContext
 ) {
   try {
-    await requireAdmin();
+    const session = await requireAdmin(request);
     const { id } = await params;
     
-    const report = await prisma.report.findUnique({
-      where: { id },
+    const report = await prisma.report.findFirst({
+      where: applyDemoStoreFilter({ id }, session),
       include: {
         customer: {
           select: {
@@ -66,7 +66,8 @@ export async function DELETE(
   { params }: RouteContext
 ) {
   try {
-    await requireAdmin();
+    const session = await requireAdmin(request);
+    assertWritableAdmin(session);
     const { id } = await params;
     await prisma.report.delete({ where: { id } });
     return NextResponse.json({ success: true });

@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { requireAdmin, handleAuthError } from '@/lib/auth';
+import { applyDemoStoreFilter, assertWritableAdmin, requireAdmin, handleAuthError } from '@/lib/auth';
 import { logError } from '@/lib/logger';
 
 export async function GET(
@@ -8,11 +8,11 @@ export async function GET(
   { params }: { params: Promise<{ sessionId: string }> }
 ) {
   try {
-    await requireAdmin();
+    const sessionAuth = await requireAdmin(request);
     const { sessionId } = await params;
 
-    const session = await prisma.menstrualChatSession.findUnique({
-      where: { id: sessionId },
+    const session = await prisma.menstrualChatSession.findFirst({
+      where: applyDemoStoreFilter({ id: sessionId }, sessionAuth),
       include: {
         store: { select: { storeName: true } },
         messages: {
@@ -54,7 +54,8 @@ export async function DELETE(
   { params }: { params: Promise<{ sessionId: string }> }
 ) {
   try {
-    await requireAdmin();
+    const sessionAuth = await requireAdmin(request);
+    assertWritableAdmin(sessionAuth);
     const { sessionId } = await params;
 
     await prisma.menstrualChatSession.delete({

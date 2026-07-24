@@ -23,12 +23,14 @@ export async function GET(request: NextRequest) {
     if (session.userType === 'admin') {
       const admin = await prisma.admin.findUnique({
         where: { id: session.userId },
-        select: { username: true, name: true },
+        select: { username: true, name: true, isDemo: true, demoBatchId: true },
       });
       if (!admin) {
         return NextResponse.json({ authenticated: false }, { status: 401 });
       }
       userName = admin.name || admin.username;
+      session.isDemo = admin.isDemo;
+      session.demoBatchId = admin.demoBatchId;
     } else if (session.userType === 'store_user') {
       const user = await prisma.storeUser.findUnique({
         where: { id: session.userId },
@@ -89,6 +91,8 @@ export async function GET(request: NextRequest) {
       phone,
       storeId: session.storeId,
       permissions: session.permissions,
+      isDemo: session.isDemo,
+      demoBatchId: session.demoBatchId,
     });
   } catch (error) {
     console.error('[auth/me] error:', error);

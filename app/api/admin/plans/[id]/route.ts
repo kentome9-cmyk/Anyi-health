@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { applyDemoStoreFilter, assertWritableAdmin, requireAdmin } from '@/lib/auth';
 
 type RouteContext = {
   params: Promise<{ id: string }>;
@@ -10,9 +11,10 @@ export async function GET(
   { params }: RouteContext
 ) {
   try {
+    const session = await requireAdmin(request);
     const { id } = await params;
-    const plan = await prisma.plan.findUnique({
-      where: { id },
+    const plan = await prisma.plan.findFirst({
+      where: applyDemoStoreFilter({ id }, session),
       include: {
         customer: { select: { name: true, phone: true } },
         store: { select: { storeName: true } },
@@ -64,6 +66,8 @@ export async function PUT(
   { params }: RouteContext
 ) {
   try {
+    const session = await requireAdmin(request);
+    assertWritableAdmin(session);
     const { id } = await params;
     const body = await request.json();
     const {
@@ -106,6 +110,8 @@ export async function DELETE(
   { params }: RouteContext
 ) {
   try {
+    const session = await requireAdmin(request);
+    assertWritableAdmin(session);
     const { id } = await params;
     await prisma.plan.delete({
       where: { id },

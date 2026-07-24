@@ -23,7 +23,7 @@ export async function verifyPassword(
 export async function validateAdmin(
   username: string,
   password: string
-): Promise<{ id: string; username: string; name: string | null } | null> {
+): Promise<{ id: string; username: string; name: string | null; isDemo: boolean; demoBatchId: string | null } | null> {
   const admin = await prisma.admin.findUnique({
     where: { username },
   });
@@ -37,6 +37,8 @@ export async function validateAdmin(
     id: admin.id,
     username: admin.username,
     name: admin.name,
+    isDemo: admin.isDemo,
+    demoBatchId: admin.demoBatchId,
   };
 }
 

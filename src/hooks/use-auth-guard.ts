@@ -37,6 +37,9 @@ export function useAuthGuard({ requiredUserType, redirectPath }: UseAuthGuardOpt
             userId: data.userId,
             userName: data.userName,
             storeId: data.storeId,
+            permissions: data.permissions,
+            isDemo: data.isDemo,
+            demoBatchId: data.demoBatchId,
           });
           setServerVerified(true);
         } else {

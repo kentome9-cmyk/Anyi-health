@@ -95,7 +95,7 @@ export default function AdminStoresPage() {
 
   const loadStores = async () => {
     try {
-      const res = await fetch('/api/admin/stores?pageSize=100');
+      const res = await fetch('/api/admin/stores?pageSize=5000');
       const data = await res.json();
       setStores(data.list || []);
     } catch (error) {

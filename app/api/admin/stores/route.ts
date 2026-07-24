@@ -2,8 +2,10 @@ import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import bcrypt from 'bcryptjs';
 import { ALL_STORE_PERMISSIONS } from '@/lib/store-permissions';
-import { requireAdmin, handleAuthError } from '@/lib/auth';
+import { applyDemoStoreListFilter, requireAdmin, handleAuthError } from '@/lib/auth';
 import { logError } from '@/lib/logger';
+
+const MAX_STORE_PAGE_SIZE = 5000;
 
 const isValidPhone = (phone: string): boolean => {
   return /^1[3-9]\d{9}$/.test(phone);
@@ -15,14 +17,17 @@ const isValidPassword = (password: string): boolean => {
 
 export async function GET(request: Request) {
   try {
-    await requireAdmin();
+    const session = await requireAdmin(request);
     const { searchParams } = new URL(request.url);
     const page = Math.max(1, parseInt(searchParams.get('page') || '1'));
-    const pageSize = Math.min(100, Math.max(1, parseInt(searchParams.get('pageSize') || '20')));
+    const pageSize = Math.min(MAX_STORE_PAGE_SIZE, Math.max(1, parseInt(searchParams.get('pageSize') || '20')));
     const skip = (page - 1) * pageSize;
+
+    const where = applyDemoStoreListFilter({}, session);
 
     const [stores, total] = await Promise.all([
       prisma.store.findMany({
+        where,
         skip,
         take: pageSize,
         orderBy: { createdAt: 'desc' },
@@ -35,7 +40,7 @@ export async function GET(request: Request) {
           },
         },
       }),
-      prisma.store.count(),
+      prisma.store.count({ where }),
     ]);
 
     const storeList = stores.map((store: typeof stores[number]) => ({

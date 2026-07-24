@@ -24,7 +24,14 @@ import {
 import { useAuthGuard } from '@/hooks/use-auth-guard';
 import { useSiteSettings } from '@/hooks/use-site-settings';
 
-const navigation = [
+type NavItem = {
+  name: string;
+  href?: string;
+  icon?: React.ComponentType<{ className?: string }>;
+  children?: NavItem[];
+};
+
+const navigation: NavItem[] = [
   { name: '首页', href: '/admin', icon: LayoutDashboard },
   { name: '门店管理', href: '/admin/stores', icon: Store },
   {
@@ -66,11 +73,32 @@ const navigation = [
     icon: Settings,
     children: [
       { name: '系统设置', href: '/admin/settings', icon: Settings },
+      { name: '演示数据导入', href: '/admin/demo-data', icon: FileText },
       { name: '管理员账号', href: '/admin/admins', icon: User },
       { name: '系统日志', href: '/admin/operation-logs', icon: ClipboardList },
     ],
   },
 ];
+
+function hideDemoDataImport(items: NavItem[]): NavItem[] {
+  return items
+    .map((item) => {
+      if (item.href === '/admin/demo-data') {
+        return null;
+      }
+
+      if (item.children) {
+        const children = hideDemoDataImport(item.children);
+        if (children.length === 0) {
+          return null;
+        }
+        return { ...item, children };
+      }
+
+      return item;
+    })
+    .filter((item): item is NavItem => Boolean(item));
+}
 
 export default function AdminLayout({
   children,
@@ -79,7 +107,7 @@ export default function AdminLayout({
 }) {
   const router = useRouter();
   const pathname = usePathname();
-  const { logout } = useAuthStore();
+  const { logout, isDemo } = useAuthStore();
   const { _hasHydrated } = useAuthGuard({ requiredUserType: 'admin', redirectPath: '/login/admin' });
   const { themeColor, siteName, siteSubtitle } = useSiteSettings();
 
@@ -87,7 +115,7 @@ export default function AdminLayout({
     try {
       await fetch('/api/auth/logout', { method: 'POST' });
     } catch {
-      // 忽略错误，继续清理本地状态
+      // Continue local logout even if the server request fails.
     }
     logout();
     router.push('/login/admin');
@@ -99,25 +127,23 @@ export default function AdminLayout({
 
   return (
     <div className="flex min-h-screen bg-gray-50">
-      {/* 侧边栏 */}
       <aside
         className="w-60 flex flex-col flex-shrink-0"
         style={{ backgroundColor: themeColor }}
       >
-        {/* Logo 区域 */}
         <div className="px-5 py-5">
           <h1 className="text-base font-semibold text-white truncate">{siteName}</h1>
-          <p className="text-xs mt-0.5" style={{ color: 'rgba(255,255,255,0.7)' }}>
-            {siteSubtitle || '管理员后台'}
-          </p>
+          <div className="mt-0.5 flex items-center gap-2">
+            <p className="text-xs" style={{ color: 'rgba(255,255,255,0.7)' }}>
+              {siteSubtitle || '管理员后台'}
+            </p>
+          </div>
         </div>
 
-        {/* 导航 */}
         <nav className="flex-1 px-3 overflow-y-auto">
-          <SidebarNav items={navigation} pathname={pathname} />
+          <SidebarNav items={isDemo ? hideDemoDataImport(navigation) : navigation} pathname={pathname} />
         </nav>
 
-        {/* 底部：我的 + 退出 */}
         <div className="p-3 mt-auto space-y-1">
           <Button
             variant="ghost"
@@ -146,11 +172,8 @@ export default function AdminLayout({
         </div>
       </aside>
 
-      {/* 主内容区 */}
       <main className="flex-1 overflow-auto">
-        <div className="p-8">
-          {children}
-        </div>
+        <div className="p-8">{children}</div>
       </main>
     </div>
   );

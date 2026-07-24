@@ -205,6 +205,8 @@ export async function POST(request: Request) {
         userType: 'admin' as const,
         userId: user.id,
         storeId: null,
+        isDemo: user.isDemo,
+        demoBatchId: user.demoBatchId,
       };
       await setAuthCookie(sessionData);
       const token = createToken(sessionData);
@@ -221,6 +223,8 @@ export async function POST(request: Request) {
         userId: user.id,
         userName: user.name || user.username,
         storeId: null,
+        isDemo: user.isDemo,
+        demoBatchId: user.demoBatchId,
         token,
       });
     }

@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import bcrypt from 'bcryptjs';
 import { logOperation } from '@/lib/operation-log';
+import { applyDemoStoreFilter, assertWritableAdmin, requireAdmin } from '@/lib/auth';
 
 type RouteContext = {
   params: Promise<{ id: string }>;
@@ -12,9 +13,10 @@ export async function GET(
   { params }: RouteContext
 ) {
   try {
+    const session = await requireAdmin(request);
     const { id } = await params;
-    const customer = await prisma.customer.findUnique({
-      where: { id },
+    const customer = await prisma.customer.findFirst({
+      where: applyDemoStoreFilter({ id }, session),
       include: {
         store: { select: { storeName: true } },
         plans: {
@@ -100,6 +102,8 @@ export async function PUT(
   { params }: RouteContext
 ) {
   try {
+    const session = await requireAdmin(request);
+    assertWritableAdmin(session);
     const { id } = await params;
     const body = await request.json();
     const {
@@ -174,6 +178,8 @@ export async function DELETE(
   { params }: RouteContext
 ) {
   try {
+    const session = await requireAdmin(request);
+    assertWritableAdmin(session);
     const { id } = await params;
     const customer = await prisma.customer.findUnique({
       where: { id },

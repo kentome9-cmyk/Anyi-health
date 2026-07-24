@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { applyDemoStoreFilter, requireAdmin } from '@/lib/auth';
 
 type RouteContext = {
   params: Promise<{ customerId: string }>;
@@ -10,15 +11,18 @@ export async function GET(
   { params }: RouteContext
 ) {
   try {
+    const session = await requireAdmin(request);
     const { customerId } = await params;
     const { searchParams } = new URL(request.url);
     const storeId = searchParams.get('storeId') || '';
 
-    const plans = await prisma.plan.findMany({
-      where: {
+    const where = applyDemoStoreFilter({
         customerId,
         ...(storeId ? { storeId } : {}),
-      },
+      }, session);
+
+    const plans = await prisma.plan.findMany({
+      where,
       orderBy: { createdAt: 'desc' },
       include: {
         bodyRecords: {

@@ -1,11 +1,11 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { requireAdmin, handleAuthError } from '@/lib/auth';
+import { applyDemoStoreFilter, requireAdmin, handleAuthError } from '@/lib/auth';
 import { logError } from '@/lib/logger';
 
 export async function GET(request: Request) {
   try {
-    await requireAdmin();
+    const session = await requireAdmin(request);
     const { searchParams } = new URL(request.url);
     const page = Math.max(1, parseInt(searchParams.get('page') || '1'));
     const pageSize = Math.min(100, Math.max(1, parseInt(searchParams.get('pageSize') || '20')));
@@ -23,6 +23,7 @@ export async function GET(request: Request) {
         { reportContent: { contains: keyword } },
       ];
     }
+    applyDemoStoreFilter(where, session);
 
     const [analyses, total] = await Promise.all([
       prisma.aiAnalysis.findMany({

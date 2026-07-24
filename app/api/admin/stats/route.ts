@@ -1,5 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { applyDemoStoreFilter, applyDemoStoreListFilter, getAdminVisibleStoreWhere, isDemoAdmin, requireAdmin } from '@/lib/auth';
+import { buildDemoDashboardStats, readDemoDashboardConfig } from '@/lib/demo-dashboard';
 
 const TABLE_STATS_DEF = [
   { key: 'store', label: '门店' },
@@ -28,8 +30,37 @@ interface DailyTrend {
   chatMessageCount: number;
 }
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
+    const session = await requireAdmin(request);
+    const demoMode = isDemoAdmin(session);
+    if (demoMode) {
+      return NextResponse.json(buildDemoDashboardStats(await readDemoDashboardConfig()));
+    }
+
+    const storeWhere = getAdminVisibleStoreWhere(session);
+    const storeLinkedWhere = <T extends Record<string, unknown> & { store?: object }>(where: T = {} as T) =>
+      applyDemoStoreFilter(where, session);
+    const hiddenDemoUserIds = demoMode ? [] : await getDemoPrincipalIds();
+    const loginLogWhere = (createdAt?: object) => demoMode
+      ? { userId: session.userId, userAgent: 'Demo Seed', ...(createdAt ? { createdAt } : {}) }
+      : {
+          ...(createdAt ? { createdAt } : {}),
+          NOT: [
+            { userId: { in: hiddenDemoUserIds } },
+            { userName: { startsWith: 'demo_' } },
+          ],
+        };
+    const operationLogWhere = (createdAt?: object) => demoMode
+      ? { operatorId: session.userId, ...(createdAt ? { createdAt } : {}) }
+      : {
+          ...(createdAt ? { createdAt } : {}),
+          NOT: [
+            { operatorId: { in: hiddenDemoUserIds } },
+            { operatorName: { startsWith: 'demo_' } },
+            { detail: { contains: 'DEMO_INVESTOR_V1' } },
+          ],
+        };
     const [
       totalStores,
       totalCustomers,
@@ -39,28 +70,29 @@ export async function GET() {
       loginLog7d,
       operationLog7d,
     ] = await Promise.all([
-      prisma.store.count(),
-      prisma.customer.count(),
-      prisma.plan.count(),
-      prisma.plan.count({ where: { status: 'active' } }),
+      prisma.store.count({ where: applyDemoStoreListFilter({}, session) }),
+      prisma.customer.count({ where: storeLinkedWhere() }),
+      prisma.plan.count({ where: storeLinkedWhere() }),
+      prisma.plan.count({ where: storeLinkedWhere({ status: 'active' }) }),
       prisma.operationLog.findFirst({
-        where: { module: 'database', action: 'export' },
+        where: demoMode
+          ? { operatorId: session.userId }
+          : { module: 'database', action: 'export' },
         orderBy: { createdAt: 'desc' },
         select: { createdAt: true },
       }),
       prisma.loginLog.count({
-        where: { createdAt: { gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) } },
+        where: loginLogWhere({ gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) }),
       }),
       prisma.operationLog.count({
-        where: { createdAt: { gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) } },
+        where: operationLogWhere({ gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) }),
       }),
     ]);
 
     const tableCounts = await Promise.all(
       TABLE_STATS_DEF.map(async (def) => {
         try {
-          const model = (prisma as unknown as Record<string, { count: () => Promise<number> }>)[def.key];
-          const count = model ? await model.count() : 0;
+          const count = await getTableCount(def.key, session);
           return { name: def.key, label: def.label, count };
         } catch {
           return { name: def.key, label: def.label, count: 0 };
@@ -76,16 +108,18 @@ export async function GET() {
 
       const [loginCount, operationCount, aiAnalysisCount, chatMessageCount] = await Promise.all([
         prisma.loginLog.count({
-          where: { createdAt: { gte: startOfDay, lt: endOfDay } },
+          where: loginLogWhere({ gte: startOfDay, lt: endOfDay }),
         }),
         prisma.operationLog.count({
-          where: { createdAt: { gte: startOfDay, lt: endOfDay } },
+          where: operationLogWhere({ gte: startOfDay, lt: endOfDay }),
         }),
         prisma.aiAnalysis.count({
-          where: { createdAt: { gte: startOfDay, lt: endOfDay } },
+          where: storeLinkedWhere({ createdAt: { gte: startOfDay, lt: endOfDay } }),
         }),
         prisma.menstrualChatMessage.count({
-          where: { createdAt: { gte: startOfDay, lt: endOfDay } },
+          where: demoMode
+            ? { createdAt: { gte: startOfDay, lt: endOfDay }, session: { store: storeWhere } }
+            : { createdAt: { gte: startOfDay, lt: endOfDay }, session: { store: storeWhere } },
         }),
       ]);
 
@@ -99,6 +133,7 @@ export async function GET() {
     }
 
     const stores = await prisma.store.findMany({
+      where: storeWhere,
       select: { id: true, storeName: true },
       take: 5,
     });
@@ -132,4 +167,73 @@ export async function GET() {
       { status: 500 }
     );
   }
+}
+
+async function getTableCount(key: string, session: Awaited<ReturnType<typeof requireAdmin>>) {
+  const demoMode = isDemoAdmin(session);
+  const storeWhere = getAdminVisibleStoreWhere(session);
+
+  switch (key) {
+    case 'store':
+      return prisma.store.count({ where: applyDemoStoreListFilter({}, session) });
+    case 'customer':
+      return prisma.customer.count({ where: applyDemoStoreFilter({}, session) });
+    case 'plan':
+      return prisma.plan.count({ where: applyDemoStoreFilter({}, session) });
+    case 'report':
+      return prisma.report.count({ where: applyDemoStoreFilter({}, session) });
+    case 'aiAnalysis':
+      return prisma.aiAnalysis.count({ where: applyDemoStoreFilter({}, session) });
+    case 'scriptRecord':
+      return prisma.scriptRecord.count({ where: applyDemoStoreFilter({}, session) });
+    case 'topic':
+      return prisma.topic.count({ where: applyDemoStoreFilter({}, session) });
+    case 'menstrualChatSession':
+      return prisma.menstrualChatSession.count({ where: applyDemoStoreFilter({}, session) });
+    case 'menstrualChatMessage':
+      return prisma.menstrualChatMessage.count({
+        where: { session: { store: storeWhere } },
+      });
+    case 'loginLog': {
+      if (demoMode) {
+        return prisma.loginLog.count({ where: { userId: session.userId, userAgent: 'Demo Seed' } });
+      }
+      const hiddenDemoUserIds = await getDemoPrincipalIds();
+      return prisma.loginLog.count({
+        where: {
+          NOT: [
+            { userId: { in: hiddenDemoUserIds } },
+            { userName: { startsWith: 'demo_' } },
+          ],
+        },
+      });
+    }
+    case 'operationLog': {
+      if (demoMode) {
+        return prisma.operationLog.count({ where: { operatorId: session.userId } });
+      }
+      const hiddenDemoUserIds = await getDemoPrincipalIds();
+      return prisma.operationLog.count({
+        where: {
+          NOT: [
+            { operatorId: { in: hiddenDemoUserIds } },
+            { operatorName: { startsWith: 'demo_' } },
+            { detail: { contains: 'DEMO_INVESTOR_V1' } },
+          ],
+        },
+      });
+    }
+    default: {
+      const model = (prisma as unknown as Record<string, { count: () => Promise<number> }>)[key];
+      return model && !demoMode ? model.count() : 0;
+    }
+  }
+}
+
+async function getDemoPrincipalIds() {
+  const [demoAdmins, demoStoreUsers] = await Promise.all([
+    prisma.admin.findMany({ where: { isDemo: true }, select: { id: true } }),
+    prisma.storeUser.findMany({ where: { isDemo: true }, select: { id: true } }),
+  ]);
+  return [...demoAdmins, ...demoStoreUsers].map((item) => item.id);
 }

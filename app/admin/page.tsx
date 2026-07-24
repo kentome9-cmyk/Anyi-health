@@ -116,6 +116,7 @@ const trendRows: Array<{
   totalKey?: 'loginLog7d' | 'operationLog7d';
 }> = [
   { title: '登录次数', icon: Globe, key: 'loginCount', totalKey: 'loginLog7d' },
+  { title: '操作次数', icon: Activity, key: 'operationCount', totalKey: 'operationLog7d' },
   { title: 'AI分析次数', icon: Bot, key: 'aiAnalysisCount' },
   { title: '聊天消息', icon: MessageSquare, key: 'chatMessageCount' },
 ];

@@ -1,18 +1,18 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { requireAdmin, handleAuthError } from '@/lib/auth';
+import { applyDemoStoreListFilter, requireAdmin, handleAuthError } from '@/lib/auth';
 import { logError } from '@/lib/logger';
 
 export async function GET(request: Request) {
   try {
-    await requireAdmin();
+    const session = await requireAdmin(request);
 
     const users = await prisma.storeUser.findMany({
-      where: {
+      where: applyDemoStoreListFilter({
         stores: {
           none: {},
         },
-      },
+      }, session),
       select: {
         id: true,
         phone: true,

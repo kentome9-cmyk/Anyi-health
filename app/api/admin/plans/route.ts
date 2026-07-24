@@ -1,9 +1,11 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import type { Prisma } from '@prisma/client';
+import { applyDemoStoreFilter, assertWritableAdmin, requireAdmin } from '@/lib/auth';
 
 export async function GET(request: Request) {
   try {
+    const session = await requireAdmin(request);
     const { searchParams } = new URL(request.url);
     const page = parseInt(searchParams.get('page') || '1');
     const pageSize = parseInt(searchParams.get('pageSize') || '20');
@@ -26,6 +28,7 @@ export async function GET(request: Request) {
     if (reportId) {
       where.reportId = reportId;
     }
+    applyDemoStoreFilter(where, session);
 
     const [plans, total] = await Promise.all([
       prisma.plan.findMany({
@@ -78,6 +81,8 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   try {
+    const session = await requireAdmin(request);
+    assertWritableAdmin(session);
     const body = await request.json();
     const {
       storeId,
