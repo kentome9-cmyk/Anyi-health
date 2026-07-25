@@ -35,7 +35,19 @@ export async function GET(request: Request) {
     const session = await requireAdmin(request);
     const demoMode = isDemoAdmin(session);
     if (demoMode) {
-      return NextResponse.json(buildDemoDashboardStats(await readDemoDashboardConfig()));
+      const importedStores = await prisma.store.findMany({
+        where: applyDemoStoreListFilter({}, session),
+        select: { id: true, storeName: true },
+        take: 5,
+        orderBy: { createdAt: 'asc' },
+      });
+
+      return NextResponse.json(
+        buildDemoDashboardStats(
+          await readDemoDashboardConfig(),
+          importedStores.map((store) => ({ id: store.id, name: store.storeName }))
+        )
+      );
     }
 
     const storeWhere = getAdminVisibleStoreWhere(session);

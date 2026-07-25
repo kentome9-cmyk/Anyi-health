@@ -1502,3 +1502,8 @@ prisma:query SELECT "public"."system_setting"."id", "public"."system_setting"."k
  GET /admin 200 in 111ms
  ✓ Compiled in 477ms (2634 modules)
  GET /admin 200 in 68ms
+ ✓ Compiled in 7.4s (4654 modules)
+ ✓ Compiled in 461ms (2634 modules)
+ ✓ Compiled in 479ms (2634 modules)
+ ✓ Compiled in 390ms (2634 modules)
+ ✓ Compiled in 3.3s (2634 modules)

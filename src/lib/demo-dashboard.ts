@@ -101,22 +101,77 @@ export async function writeDemoDashboardConfig(config: DemoDashboardConfig) {
   await fs.writeFile(CONFIG_FILE, `${JSON.stringify(normalizeDemoDashboardConfig(config), null, 2)}\n`, 'utf8');
 }
 
-function spreadSevenDays(total: number) {
-  const weights = [0.08, 0.1, 0.12, 0.14, 0.16, 0.18, 0.22];
-  const values = weights.map((weight) => Math.floor(total * weight));
+export type DemoDashboardStore = {
+  id: string;
+  name: string;
+};
+
+function hashString(value: string) {
+  let hash = 2166136261;
+  for (let index = 0; index < value.length; index++) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return hash >>> 0;
+}
+
+function seededRandom(seed: number) {
+  let state = seed >>> 0;
+  return () => {
+    state += 0x6d2b79f5;
+    let value = state;
+    value = Math.imul(value ^ (value >>> 15), value | 1);
+    value ^= value + Math.imul(value ^ (value >>> 7), value | 61);
+    return ((value ^ (value >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+function spreadSevenDays(total: number, salt: string) {
+  if (total <= 0) {
+    return Array.from({ length: 7 }, () => 0);
+  }
+
+  const today = new Date();
+  const dateSeed = `${today.getFullYear()}-${today.getMonth() + 1}-${today.getDate()}`;
+  const random = seededRandom(hashString(`${salt}:${total}:${dateSeed}`));
+  const weights = Array.from({ length: 7 }, (_, index) => {
+    const base = 0.75 + random() * 0.5;
+    const lastDayDamping = index === 6 ? 0.82 + random() * 0.18 : 0.9 + random() * 0.25;
+    return base * lastDayDamping;
+  });
+
+  const topBeforeLast = Math.max(...weights.slice(0, 6));
+  if (weights[6] >= topBeforeLast) {
+    const swapIndex = Math.floor(random() * 6);
+    [weights[6], weights[swapIndex]] = [weights[swapIndex], weights[6]];
+  }
+
+  const weightTotal = weights.reduce((sum, value) => sum + value, 0);
+  const exactValues = weights.map((weight) => (total * weight) / weightTotal);
+  const values = exactValues.map((value) => Math.floor(value));
   let remainder = total - values.reduce((sum, value) => sum + value, 0);
-  for (let i = values.length - 1; i >= 0 && remainder > 0; i--) {
-    values[i]++;
+  const fractionalOrder = exactValues
+    .map((value, index) => ({ index, fraction: value - Math.floor(value) }))
+    .sort((a, b) => b.fraction - a.fraction);
+
+  for (let index = 0; index < fractionalOrder.length && remainder > 0; index++) {
+    values[fractionalOrder[index].index]++;
     remainder--;
   }
+
+  if (values[6] > Math.max(...values.slice(0, 6))) {
+    const swapIndex = values.slice(0, 6).indexOf(Math.min(...values.slice(0, 6)));
+    [values[6], values[swapIndex]] = [values[swapIndex], values[6]];
+  }
+
   return values;
 }
 
-export function buildDemoDashboardStats(config: DemoDashboardConfig) {
-  const login = spreadSevenDays(config.trendTotals.loginCount);
-  const operation = spreadSevenDays(config.trendTotals.operationCount);
-  const ai = spreadSevenDays(config.trendTotals.aiAnalysisCount);
-  const chat = spreadSevenDays(config.trendTotals.chatMessageCount);
+export function buildDemoDashboardStats(config: DemoDashboardConfig, importedStores: DemoDashboardStore[] = []) {
+  const login = spreadSevenDays(config.trendTotals.loginCount, 'login');
+  const operation = spreadSevenDays(config.trendTotals.operationCount, 'operation');
+  const ai = spreadSevenDays(config.trendTotals.aiAnalysisCount, 'ai');
+  const chat = spreadSevenDays(config.trendTotals.chatMessageCount, 'chat');
 
   const dailyTrends = Array.from({ length: 7 }, (_, index) => {
     const date = new Date();
@@ -130,13 +185,17 @@ export function buildDemoDashboardStats(config: DemoDashboardConfig) {
     };
   });
 
-  const storeStats = Array.from({ length: Math.min(config.totalStores, 5) }, (_, index) => ({
-    id: `demo-dashboard-store-${index + 1}`,
-    name: ['上海静安演示店', '杭州西湖演示店', '深圳南山演示店', '成都高新演示店', '南京鼓楼演示店'][index],
-    customerCount: Math.max(Math.floor(config.totalCustomers * [0.18, 0.15, 0.13, 0.11, 0.09][index]), 0),
-    planCount: Math.max(Math.floor(config.totalPlans * [0.17, 0.14, 0.12, 0.1, 0.08][index]), 0),
-    aiAnalysisCount: Math.max(Math.floor(config.aiAnalyses * [0.18, 0.14, 0.12, 0.1, 0.08][index]), 0),
-  }));
+  const fallbackStoreNames = ['上海静安演示店', '杭州西湖演示店', '深圳南山演示店', '成都高新演示店', '南京鼓楼演示店'];
+  const storeStats = Array.from({ length: Math.min(Math.max(config.totalStores, importedStores.length), 5) }, (_, index) => {
+    const importedStore = importedStores[index];
+    return {
+      id: importedStore?.id || `demo-dashboard-store-${index + 1}`,
+      name: importedStore?.name || fallbackStoreNames[index],
+      customerCount: Math.max(Math.floor(config.totalCustomers * [0.18, 0.15, 0.13, 0.11, 0.09][index]), 0),
+      planCount: Math.max(Math.floor(config.totalPlans * [0.17, 0.14, 0.12, 0.1, 0.08][index]), 0),
+      aiAnalysisCount: Math.max(Math.floor(config.aiAnalyses * [0.18, 0.14, 0.12, 0.1, 0.08][index]), 0),
+    };
+  });
 
   return {
     totalStores: config.totalStores,
